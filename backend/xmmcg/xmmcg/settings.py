@@ -10,47 +10,49 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
-import os
 from pathlib import Path
+import dj_database_url
+from xmmcg.storage import r2_storage_options
 from decouple import config, Csv, Config, RepositoryEnv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# 加载环境变量文件（项目根目录的 .env 文件）
-# 支持 login_credentials.env 或 .env
-env_path = BASE_DIR.parent.parent / 'login_credentials.env'
-if not env_path.exists():
-    env_path = BASE_DIR.parent.parent / '.env'
-
+# Environment variables override the repository-root .env file.
+env_path = BASE_DIR.parent.parent / ".env"
 if env_path.exists():
     config = Config(RepositoryEnv(str(env_path)))
-else:
-    # 如果 .env 文件不存在，使用默认配置（优先从系统环境变量读取）
-    pass  # config 已经导入
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-_4yj_q2kr3-x%mlu-4@j84l#r4f-8gz)9d*xid@bf*pm=2ps^r')
+SECRET_KEY = config("SECRET_KEY", default="development-only-change-before-deployment")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', default=True, cast=bool)
+DEBUG = config("DEBUG", default=True, cast=bool)
+if not DEBUG and SECRET_KEY == "development-only-change-before-deployment":
+    from django.core.exceptions import ImproperlyConfigured
+
+    raise ImproperlyConfigured("生产环境必须配置 SECRET_KEY")
 
 # ALLOWED_HOSTS: 默认允许所有主机（开发），生产环境通过 .env 配置
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='*', cast=Csv())
+ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="*", cast=Csv())
 
 # Production Security Settings (only enabled in production)
 if not DEBUG:
-    SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=False, cast=bool)
-    SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=0, cast=int)
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = config('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=False, cast=bool)
-    SECURE_HSTS_PRELOAD = config('SECURE_HSTS_PRELOAD', default=False, cast=bool)
-    SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=False, cast=bool)
-    CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=False, cast=bool)
-    SECURE_CROSS_ORIGIN_OPENER_POLICY = config('SECURE_CROSS_ORIGIN_OPENER_POLICY', default=None)
+    SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=False, cast=bool)
+    SECURE_HSTS_SECONDS = config("SECURE_HSTS_SECONDS", default=0, cast=int)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = config(
+        "SECURE_HSTS_INCLUDE_SUBDOMAINS", default=False, cast=bool
+    )
+    SECURE_HSTS_PRELOAD = config("SECURE_HSTS_PRELOAD", default=False, cast=bool)
+    SESSION_COOKIE_SECURE = config("SESSION_COOKIE_SECURE", default=False, cast=bool)
+    CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=False, cast=bool)
+    SECURE_CROSS_ORIGIN_OPENER_POLICY = config(
+        "SECURE_CROSS_ORIGIN_OPENER_POLICY", default=None
+    )
 else:
     # Development: disable security features that require HTTPS
     SECURE_SSL_REDIRECT = False
@@ -109,10 +111,15 @@ WSGI_APPLICATION = "xmmcg.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "NAME": config("SQLITE_PATH", default=str(BASE_DIR / "db.sqlite3")),
     }
 }
 
+
+if config("DATABASE_URL", default=""):
+    DATABASES["default"] = dj_database_url.parse(
+        config("DATABASE_URL"), conn_max_age=60, conn_health_checks=True
+    )
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
@@ -140,168 +147,79 @@ LANGUAGE_CODE = "zh-hans"  # 中文简体
 
 # 时区设置：使用中国标准时间（Asia/Shanghai）
 # 这确保了定时任务和数据库时间的一致性
-TIME_ZONE = config('TIME_ZONE', default='Asia/Shanghai')
+TIME_ZONE = config("TIME_ZONE", default="Asia/Shanghai")
 
 USE_I18N = True
 
 USE_TZ = True  # 启用时区支持，内部使用 UTC，显示时转换为 TIME_ZONE
 
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/6.0/howto/static-files/
-
+# All uploaded assets and collected Django static files live in R2.
+STORAGES = {
+    "default": {
+        "BACKEND": "xmmcg.storage.R2Storage",
+        "OPTIONS": r2_storage_options(config, "media"),
+    },
+    "staticfiles": {
+        "BACKEND": "xmmcg.storage.R2StaticStorage",
+        "OPTIONS": r2_storage_options(config, "static"),
+    },
+}
 STATIC_URL = "/static/"
-STATIC_ROOT = "/var/www/xmmcg/static"  # 生产环境静态文件收集目录
+# These limits concern request buffering only, never persistent asset storage.
+FILE_UPLOAD_MAX_MEMORY_SIZE = 8 * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024
+MAX_AUDIO_SIZE_MB = config("MAX_AUDIO_SIZE_MB", default=50, cast=int)
+MAX_COVER_SIZE_MB = config("MAX_COVER_SIZE_MB", default=10, cast=int)
+MAX_VIDEO_SIZE_MB = config("MAX_VIDEO_SIZE_MB", default=200, cast=int)
+MAX_CHART_SIZE_MB = config("MAX_CHART_SIZE_MB", default=5, cast=int)
 
-# Media Files Configuration
-MEDIA_URL = "/media/"
-if not DEBUG:
-    MEDIA_ROOT = Path('/var/www/xmmcg/media')
-else:
-    MEDIA_ROOT = BASE_DIR / "media"
-
-# File Upload Settings
-FILE_UPLOAD_MAX_MEMORY_SIZE = 25 * 1024 * 1024  # 25MB (支持20MB视频文件)
-DATA_UPLOAD_MAX_MEMORY_SIZE = 25 * 1024 * 1024  # 25MB
-
-# CORS Configuration
-# 生产环境域名通过环境变量 PRODUCTION_DOMAIN 配置
-PRODUCTION_DOMAIN = config('PRODUCTION_DOMAIN', default='xmmcg.majdata.net')
-
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:5173",
-]
-
-if PRODUCTION_DOMAIN:
-    CORS_ALLOWED_ORIGINS.extend([
-        f"https://{PRODUCTION_DOMAIN}",
-        f"http://{PRODUCTION_DOMAIN}",
-    ])
-
+CORS_ALLOWED_ORIGINS = config(
+    "FRONTEND_ORIGINS",
+    default="http://localhost:5173,http://127.0.0.1:5173",
+    cast=Csv(),
+)
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = False
-CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
-    'range',  # 支持范围请求，用于大文件下载
-]
-CORS_EXPOSE_HEADERS = [
-    'content-range',
-    'content-length',
-    'accept-ranges',
-]
+CORS_URLS_REGEX = r"^/api/.*$"
+CORS_EXPOSE_HEADERS = ["content-disposition"]
+CSRF_TRUSTED_ORIGINS = config(
+    "CSRF_TRUSTED_ORIGINS", default=",".join(CORS_ALLOWED_ORIGINS), cast=Csv()
+)
+CSRF_COOKIE_HTTPONLY = False
+SESSION_COOKIE_SAMESITE = config("SESSION_COOKIE_SAMESITE", default="Lax")
+CSRF_COOKIE_SAMESITE = config("CSRF_COOKIE_SAMESITE", default="Lax")
+SESSION_COOKIE_SECURE = config("SESSION_COOKIE_SECURE", default=not DEBUG, cast=bool)
+CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=not DEBUG, cast=bool)
+R2_CORS_ORIGINS = config(
+    "R2_CORS_ORIGINS", default=",".join(CORS_ALLOWED_ORIGINS), cast=Csv()
+)
 
-# CSRF Configuration for SPA
-CSRF_COOKIE_HTTPONLY = False  # 前端需要读取 csrftoken cookie
-CSRF_COOKIE_SAMESITE = 'Lax'  # 开发环境同源
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:5173",
-]
-
-# 从环境变量读取额外的受信任源
-EXTRA_CSRF_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=Csv())
-if EXTRA_CSRF_ORIGINS:
-    CSRF_TRUSTED_ORIGINS.extend(EXTRA_CSRF_ORIGINS)
-
-if PRODUCTION_DOMAIN:
-    CSRF_TRUSTED_ORIGINS.extend([
-        f"https://{PRODUCTION_DOMAIN}",
-        f"http://{PRODUCTION_DOMAIN}",
-    ])
-
-CSRF_USE_SESSIONS = False
-
-# REST Framework Configuration
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.SessionAuthentication",
+        "rest_framework.authentication.SessionAuthentication"
     ],
-    "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.AllowAny",
-    ],
-    'DEFAULT_RENDERER_CLASSES': [
-        'rest_framework.renderers.JSONRenderer',
-    ],
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
-    "PAGE_SIZE": 10,
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
+    "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "DEFAULT_THROTTLE_RATES": {
+        "registration": "20/hour",
+        "account_search": "60/min",
+        "login": "30/min",
+    },
 }
-if DEBUG:
-    REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'].append(
-        'rest_framework.renderers.BrowsableAPIRenderer'
-    )
-
-# Security Settings
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-        "OPTIONS": {
-            "min_length": 8,
-        }
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
-    },
-]
-
-# ========= Majdata.net Chart API Settings =========
-ENABLE_CHART_FORWARD_TO_MAJDATA = config('ENABLE_CHART_FORWARD_TO_MAJDATA', default=True, cast=bool)
-MAJDATA_BASE_URL = config('MAJDATA_BASE_URL', default='https://majdata.net/api3/api/')
-MAJDATA_LOGIN_URL = config('MAJDATA_LOGIN_URL', default='https://majdata.net/api3/api/account/Login')
-MAJDATA_UPLOAD_URL = config('MAJDATA_UPLOAD_URL', default='https://majdata.net/api3/api/maichart/upload')
-MAJDATA_USERNAME = config('MAJDATA_USERNAME', default='xmmcg5')
-MAJDATA_PASSWD_HASHED = config('MAJDATA_PASSWD_HASHED', default='123')
-
-
-# 注意：登录逻辑已迁移到 songs/majdata_service.py
-# 使用方法：from songs.majdata_service import MajdataService
-#          session = MajdataService.get_session()
-
-
-# ========= Peer Review System Settings =========
-# 互评系统配置
-PEER_REVIEW_TASKS_PER_USER = config('PEER_REVIEW_TASKS_PER_USER', default=8, cast=int)  # 每个用户需要完成的评分任务数
-PEER_REVIEW_MAX_SCORE = config('PEER_REVIEW_MAX_SCORE', default=50, cast=int)  # 互评满分
-# ==================== 可配置常量 ====================
-# 新用户注册时获得的默认代币数量
-DEFAULT_USER_TOKENS = 1000
-
-
+ENABLE_CHART_FORWARD_TO_MAJDATA = config(
+    "ENABLE_CHART_FORWARD_TO_MAJDATA", default=True, cast=bool
+)
+MAJDATA_USERNAME = config("MAJDATA_USERNAME", default="")
+MAJDATA_PASSWD_HASHED = config("MAJDATA_PASSWD_HASHED", default="")
+MAJDATA_LOGIN_URL = config(
+    "MAJDATA_LOGIN_URL", default="https://majdata.net/api3/api/account/Login"
+)
+MAJDATA_UPLOAD_URL = config(
+    "MAJDATA_UPLOAD_URL", default="https://majdata.net/api3/api/maichart/upload"
+)
 LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {message}',
-            'style': '{',
-        },
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler', # 这会将日志推送到 stdout/stderr
-            'formatter': 'verbose',
-        },
-    },
-    'root': {
-        'handlers': ['console'],
-        'level': 'INFO', # 确保级别高于或等于 INFO，否则 logger.info 会被过滤
-    },
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "root": {"handlers": ["console"], "level": "INFO"},
 }

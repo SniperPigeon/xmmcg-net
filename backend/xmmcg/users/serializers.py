@@ -1,172 +1,110 @@
-from rest_framework import serializers
-from django.contrib.auth.models import User
+from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
-from django.core.exceptions import ValidationError
-from .models import UserProfile
+from django.db import transaction
+from rest_framework import serializers
+from .models import UserProfile, identity_id
 
-USER_DEFAULT_TOKEN = 1000
+User = get_user_model()
+
+
 class UserRegistrationSerializer(serializers.ModelSerializer):
-    qqid = serializers.CharField(required=True, write_only=True)
-    """用户注册序列化器"""
-    password = serializers.CharField(
-        write_only=True,
-        required=True,
-        validators=[validate_password],
-        style={'input_type': 'password'}
+    password = serializers.CharField(write_only=True, validators=[validate_password])
+    password_confirm = serializers.CharField(write_only=True)
+    qqid = serializers.RegexField(
+        r"^[1-9][0-9]{4,19}$", required=False, write_only=True
     )
-    password_confirm = serializers.CharField(
-        write_only=True,
-        required=True,
-        style={'input_type': 'password'}
-    )
+    main_account_id = serializers.IntegerField(required=False, write_only=True)
+    main_password = serializers.CharField(required=False, write_only=True)
 
     class Meta:
         model = User
-        fields = ('username', 'qqid', 'email', 'password', 'password_confirm')
-        extra_kwargs = {
-            'email': {'required': True},
-        }
+        fields = (
+            "username",
+            "email",
+            "qqid",
+            "password",
+            "password_confirm",
+            "main_account_id",
+            "main_password",
+        )
 
     def validate(self, data):
-        """验证两次密码是否一致"""
-        if data['password'] != data['password_confirm']:
-            raise serializers.ValidationError({
-                'password': '两次输入的密码不一致'
-            })
-        
-        # 验证用户名是否已存在
-        if User.objects.filter(username=data['username']).exists():
-            raise serializers.ValidationError({
-                'username': '用户名已存在'
-            })
-        #验证QQ号是否已存在
-        if data.get('qqid') and UserProfile.objects.filter(qqid=data['qqid']).exists():
-            raise serializers.ValidationError({
-                'qqid': '该QQ号已被注册'
-            })
-        
-        # 验证邮箱是否已存在
-        if data.get('email') and User.objects.filter(email=data['email']).exists():
-            raise serializers.ValidationError({
-                'email': '该邮箱已被注册'
-            })
-        
+        if data["password"] != data.pop("password_confirm"):
+            raise serializers.ValidationError("两次密码不一致")
+        main_id = data.pop("main_account_id", None)
+        main_password = data.pop("main_password", "")
+        if main_id:
+            main = User.objects.filter(pk=main_id, is_active=True).first()
+            if (
+                not main
+                or authenticate(username=main.username, password=main_password) is None
+            ):
+                raise serializers.ValidationError("大号身份验证失败")
+            if identity_id(main) != main.pk:
+                raise serializers.ValidationError("请选择大号，不能绑定另一个小号")
+            self.main = main
+            data.pop("qqid", None)
+            data["email"] = ""  # Contacts are inherited, not duplicated.
+        else:
+            email = data.get("email", "").strip().lower()
+            if not email or not data.get("qqid"):
+                raise serializers.ValidationError("独立账号需要填写邮箱和 QQ 号")
+            if User.objects.filter(email__iexact=email).exists():
+                raise serializers.ValidationError("邮箱已注册；同一人请绑定已有大号")
+            if UserProfile.objects.filter(qqid=data["qqid"]).exists():
+                raise serializers.ValidationError("QQ 号已注册；同一人请绑定已有大号")
+            data["email"] = email
         return data
 
+    @transaction.atomic
     def create(self, validated_data):
-        """创建用户和用户资料"""
-        validated_data.pop('password_confirm')
-        password = validated_data.pop('password')
-        qqid = validated_data.pop('qqid', '') # User里没有qq号字段，以免出错
-        user = User.objects.create(**validated_data)
-        user.set_password(password)
-        user.save()
-        # 创建用户资料（包含 token）
-        UserProfile.objects.create(user=user, qqid=qqid, token=USER_DEFAULT_TOKEN) # 已经获得了QQID。
+        main = getattr(self, "main", None)
+        if main:
+            main = User.objects.select_for_update().get(pk=main.pk)
+            if not main.is_active or identity_id(main) != main.pk:
+                raise serializers.ValidationError("大号状态已变化，请重新验证")
+        qqid = validated_data.pop("qqid", None)
+        user = User.objects.create_user(**validated_data)
+        UserProfile.objects.create(user=user, qqid=qqid, main_account=main)
         return user
 
 
-class UserLoginSerializer(serializers.Serializer):
-    """用户登录序列化器"""
-    username = serializers.CharField(required=True)
-    password = serializers.CharField(write_only=True, required=True)
-
-    class Meta:
-        fields = ('username', 'password')
-
-
 class UserDetailSerializer(serializers.ModelSerializer):
-    """用户详情序列化器（获取和修改用户信息）"""
-    token = serializers.SerializerMethodField()
-    songsCount = serializers.SerializerMethodField()
-    chartsCount = serializers.SerializerMethodField()
-    qqid = serializers.CharField(source='profile.qqid', read_only=True)
-    preferred_name = serializers.CharField(source='profile.preferred_name', allow_blank=True, required=False)
+    email = serializers.SerializerMethodField()
+    qqid = serializers.SerializerMethodField()
+    preferred_name = serializers.CharField(source="profile.preferred_name", default="")
+    main_account = serializers.SerializerMethodField()
+    songsCount = serializers.IntegerField(source="songs.count", read_only=True)
+    chartsCount = serializers.IntegerField(source="charts.count", read_only=True)
 
     class Meta:
         model = User
-        fields = ('username', 'qqid', 'email', 'is_active', 'date_joined', 'token', 'songsCount', 'chartsCount', 'preferred_name')
-        read_only_fields = ('username', 'date_joined', 'token', 'songsCount', 'chartsCount')
+        fields = (
+            "id",
+            "username",
+            "email",
+            "qqid",
+            "preferred_name",
+            "main_account",
+            "is_staff",
+            "date_joined",
+            "songsCount",
+            "chartsCount",
+        )
 
-    def get_token(self, obj):
-        """获取用户代币，如果没有 profile 则创建一个"""
-        try:
-            return obj.profile.token
-        except:
-            # 如果没有 profile，创建一个
-            from .models import UserProfile
-            profile, created = UserProfile.objects.get_or_create(user=obj)
-            return profile.token
+    def get_email(self, user):
+        return User.objects.get(pk=identity_id(user)).email
 
-    def get_songsCount(self, obj):
-        """获取用户上传的歌曲数量"""
-        return obj.songs.count()
+    def get_qqid(self, user):
+        return (
+            UserProfile.objects.filter(user_id=identity_id(user))
+            .values_list("qqid", flat=True)
+            .first()
+        )
 
-    def get_chartsCount(self, obj):
-        """获取用户上传的谱面数量"""
-        return obj.charts.count() if hasattr(obj, 'charts') else 0
-
-    def update(self, instance, validated_data):
-        profile_data = validated_data.pop('profile', {})
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-        if profile_data:
-            profile = instance.profile
-            for attr, value in profile_data.items():
-                setattr(profile, attr, value)
-            profile.save()
-        return instance
-
-
-class ChangePasswordSerializer(serializers.Serializer):
-    """修改密码序列化器"""
-    old_password = serializers.CharField(write_only=True, required=True)
-    new_password = serializers.CharField(
-        write_only=True,
-        required=True,
-        validators=[validate_password]
-    )
-    new_password_confirm = serializers.CharField(write_only=True, required=True)
-
-    def validate(self, data):
-        """验证新密码和确认密码是否一致"""
-        if data['new_password'] != data['new_password_confirm']:
-            raise serializers.ValidationError({
-                'new_password': '两次输入的新密码不一致'
-            })
-        return data
-
-
-class UpdateTokenSerializer(serializers.Serializer):
-    """修改用户 token 序列化器"""
-    token = serializers.IntegerField(required=True, min_value=0)
-
-    def validate_token(self, value):
-        """验证 token 值"""
-        if value < 0:
-            raise serializers.ValidationError("Token 不能为负数")
-        return value
-
-
-class UserPublicSerializer(serializers.ModelSerializer):
-    """
-    专门用于公开展示的用户信息
-    只包含：ID、用户名、QQ号、谱师名义、作品统计
-    ❌ 绝对不包含：Token(余额)、Email、密码等
-    """
-    qqid = serializers.CharField(source='profile.qqid', read_only=True)
-    preferred_name = serializers.CharField(source='profile.preferred_name', read_only=True)
-    songsCount = serializers.SerializerMethodField()
-    chartsCount = serializers.SerializerMethodField()
-
-    class Meta:
-        model = User
-        fields = ('id', 'username', 'qqid', 'preferred_name', 'songsCount', 'chartsCount')
-
-    # 复用你之前的统计逻辑
-    def get_songsCount(self, obj):
-        return obj.songs.count()
-    
-    def get_chartsCount(self, obj):
-        return obj.charts.count() if hasattr(obj, 'charts') else 0
+    def get_main_account(self, user):
+        root_id = identity_id(user)
+        if root_id == user.pk:
+            return None
+        main = User.objects.get(pk=root_id)
+        return {"id": main.pk, "username": main.username}

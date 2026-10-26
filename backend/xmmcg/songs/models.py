@@ -1,904 +1,369 @@
+"""The contest's records. A chart is independent of songs and draws."""
+
 import uuid
+from decimal import Decimal
+from pathlib import PurePosixPath
+
+from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
-from django.contrib.auth.models import User
-from django.core.exceptions import ValidationError
-
-# ==================== 可调整的常量 ====================
-# 每个用户可上传的歌曲数量限制
-MAX_SONGS_PER_USER = 3
-
-# 每个用户可以竞标的歌曲数量限制
-MAX_BIDS_PER_USER = 5
-
-# 保底分配需要扣除的代币数量
-RANDOM_ALLOCATION_COST = 200
-
-# 互评系统常量（已迁移到settings.py，此处保留用于向后兼容）
-# 推荐：在settings.py中设置 PEER_REVIEW_TASKS_PER_USER 和 PEER_REVIEW_MAX_SCORE
-PEER_REVIEW_TASKS_PER_USER = 8  # 每个用户需要完成的评分任务数（可在settings.py覆盖）
-PEER_REVIEW_MAX_SCORE = 50      # 互评满分（可在settings.py覆盖）
-
-# 背景视频常量
-MAX_VIDEO_SIZE_MB = 20          # 背景视频最大文件大小（MB）
+from django.utils import timezone
 
 
-# ==================== Banner 与公告 ====================
-
-class Banner(models.Model):
-    """首页轮换 Banner"""
-    title = models.CharField(max_length=100, help_text='Banner 标题')
-    content = models.TextField(help_text='Banner 描述内容')
-    image_url = models.CharField(null=True, blank=True, help_text='背景图片 URL（可选）')
-    link = models.URLField(null=True, blank=True, help_text='点击跳转链接（可选）')
-    button_text = models.CharField(max_length=50, default='了解更多', help_text='按钮文本')
-    color = models.CharField(max_length=20, default='#409EFF', help_text='背景色')
-    priority = models.IntegerField(default=0, help_text='优先级，越大越靠前')
-    is_active = models.BooleanField(default=True, help_text='是否启用')
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = 'Banner'
-        verbose_name_plural = 'Banner'
-        ordering = ['-priority', '-created_at']
-
-    def __str__(self):
-        return f"{self.title} ({'启用' if self.is_active else '禁用'})"
+def asset_key(instance, filename, category):
+    return f"{category}/{uuid.uuid4().hex}/{PurePosixPath(filename).name}"
 
 
-class Announcement(models.Model):
-    """首页公告"""
-    CATEGORY_CHOICES = [
-        ('news', '新闻'),
-        ('event', '活动'),
-        ('notice', '通知'),
-    ]
-
-    title = models.CharField(max_length=200, help_text='公告标题')
-    content = models.TextField(help_text='公告内容（支持 Markdown）')
-    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='news', help_text='公告分类')
-    priority = models.IntegerField(default=0, help_text='优先级，越大越靠前')
-    is_pinned = models.BooleanField(default=False, help_text='是否置顶')
-    is_active = models.BooleanField(default=True, help_text='是否启用')
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = '公告'
-        verbose_name_plural = '公告'
-        ordering = ['-is_pinned', '-priority', '-created_at']
-
-    def __str__(self):
-        return f"{self.title} ({'启用' if self.is_active else '禁用'})"
-
-
-# ==================== 比赛阶段管理 ====================
-
-def get_default_page_access():
-    """默认页面访问权限配置"""
-    return {
-        "songs": True,
-        "charts": True,
-        "profile": True,
-        "eval": True,
-    }
-
-
-class CompetitionPhase(models.Model):
-    """比赛阶段管理模型（用于时间控制和权限管理）"""
-    
-    # 统计类型选择
-    SUBMISSIONS_TYPE_CHOICES = [
-        ('songs', '歌曲数'),
-        ('charts', '谱面数'),
-    ]
-    
-    # 阶段信息
-    name = models.CharField(max_length=100, help_text='阶段名称，如"竞标期"、"制谱期"')
-    phase_key = models.CharField(
-        max_length=50, 
-        unique=True, 
-        help_text='唯一标识符，用于权限绑定。如 bidding、mapping、peer_review'
-    )
-    description = models.TextField(help_text='阶段描述，显示在主页时间轴')
-    
-    # 统计类型配置
-    submissions_type = models.CharField(
-        max_length=20,
-        choices=SUBMISSIONS_TYPE_CHOICES,
-        default='songs',
-        help_text='该阶段统计的作品类型（显示在首页）'
-    )
-    
-    # 时间设置
-    start_time = models.DateTimeField(help_text='阶段开始时间')
-    end_time = models.DateTimeField(help_text='阶段结束时间')
-    
-    # 显示和权限
-    order = models.PositiveIntegerField(default=0, help_text='显示顺序（从小到大）')
-    is_active = models.BooleanField(default=True, help_text='是否启用此阶段')
-    
-    # 页面访问权限配置（JSON 格式）
-    page_access = models.JSONField(
-        default=get_default_page_access,
-        help_text='页面访问权限配置，如 {"songs": true, "charts": false, "profile": true, "eval": true}（注：首页、登录、注册页总是可访问）'
-    )
-    
-    # 系统字段
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        verbose_name = '比赛阶段'
-        verbose_name_plural = '比赛阶段'
-        ordering = ['order', 'start_time']
-    
-    def __str__(self):
-        return f"{self.name} ({self.phase_key}) - {self.status}"
-    
-    @property
-    def status(self):
-        """
-        实时计算阶段状态
-        - upcoming: 即将开始（当前时间 < 开始时间）
-        - active: 进行中（开始时间 ≤ 当前时间 ≤ 结束时间）
-        - ended: 已结束（当前时间 > 结束时间）
-        """
-        from django.utils import timezone
-        now = timezone.now()
-        if now < self.start_time:
-            return 'upcoming'
-        elif now <= self.end_time:
-            return 'active'
-        else:
-            return 'ended'
-    
-    def get_time_remaining(self):
-        """获取剩余时间字符串"""
-        from django.utils import timezone
-        now = timezone.now()
-        
-        if self.status == 'upcoming':
-            delta = self.start_time - now
-        elif self.status == 'active':
-            delta = self.end_time - now
-        else:
-            return '已结束'
-        
-        days = delta.days
-        hours = delta.seconds // 3600
-        
-        if days > 0:
-            return f'{days} 天 {hours} 小时'
-        else:
-            return f'{hours} 小时'
-    
-    def get_progress_percent(self):
-        """获取阶段进度百分比（进行中返回进度，其他返回 0 或 100）"""
-        from django.utils import timezone
-        now = timezone.now()
-        
-        if self.status == 'upcoming':
-            return 0
-        elif self.status == 'ended':
-            return 100
-        else:
-            # 进行中：计算百分比
-            total_duration = (self.end_time - self.start_time).total_seconds()
-            elapsed = (now - self.start_time).total_seconds()
-            return max(0, min(100, int((elapsed / total_duration) * 100)))
-
-
+# Keep these names importable: historical migrations reference them.
 def get_audio_filename(instance, filename):
-    """
-    生成音频文件名
-    格式: audio_user{user_id}_{uuid}.{ext}
-    例: audio_user1_a1b2c3d4.mp3
-    """
-    import uuid as uuid_lib
-    ext = filename.split('.')[-1].lower()
-    unique_id = uuid_lib.uuid4().hex[:8]
-    return f'songs/audio_user{instance.user.id}_{unique_id}.{ext}'
+    return asset_key(instance, filename, "songs/audio")
 
 
 def get_cover_filename(instance, filename):
-    """
-    生成封面文件名
-    格式: cover_user{user_id}_{uuid}.{ext}
-    例: cover_user1_a1b2c3d4.jpg
-    """
-    import uuid as uuid_lib
-    ext = filename.split('.')[-1].lower()
-    unique_id = uuid_lib.uuid4().hex[:8]
-    return f'songs/cover_user{instance.user.id}_{unique_id}.{ext}'
+    return asset_key(instance, filename, "songs/covers")
 
 
 def get_video_filename(instance, filename):
-    """
-    生成背景视频文件名
-    格式: video_user{user_id}_{uuid}.{ext}
-    例: video_user1_a1b2c3d4.mp4
-    """
-    import uuid as uuid_lib
-    ext = filename.split('.')[-1].lower()
-    unique_id = uuid_lib.uuid4().hex[:8]
-    return f'songs/video_user{instance.user.id}_{unique_id}.{ext}'
+    return asset_key(instance, filename, "songs/video")
 
 
 def get_chart_filename(instance, filename):
-    """
-    生成谱面文件名（固定为maidata.txt）
-    格式: charts/user{user_id}_song{song_id}_{uuid}/maidata.txt
-    例: charts/user1_song5_a1b2c3d4/maidata.txt
-    """
-    import uuid as uuid_lib
-    unique_id = uuid_lib.uuid4().hex[:8]
-    return f'charts/user{instance.user.id}_song{instance.song.id}_{unique_id}/maidata.txt'
+    return asset_key(instance, "maidata.txt", "charts/data")
 
 
 def get_chart_audio_filename(instance, filename):
-    """生成谱面音频文件名"""
-    import uuid as uuid_lib
-    ext = filename.split('.')[-1].lower()
-    unique_id = uuid_lib.uuid4().hex[:8]
-    return f'charts/audio_user{instance.user.id}_song{instance.song.id}_{unique_id}.{ext}'
+    return asset_key(instance, filename, "charts/audio")
 
 
 def get_chart_cover_filename(instance, filename):
-    """生成谱面封面文件名"""
-    import uuid as uuid_lib
-    ext = filename.split('.')[-1].lower()
-    unique_id = uuid_lib.uuid4().hex[:8]
-    return f'charts/cover_user{instance.user.id}_song{instance.song.id}_{unique_id}.{ext}'
+    return asset_key(instance, filename, "charts/covers")
 
 
 def get_chart_video_filename(instance, filename):
-    """生成谱面背景视频文件名"""
-    import uuid as uuid_lib
-    ext = filename.split('.')[-1].lower()
-    unique_id = uuid_lib.uuid4().hex[:8]
-    return f'charts/video_user{instance.user.id}_song{instance.song.id}_{unique_id}.{ext}'
+    return asset_key(instance, filename, "charts/video")
+
+
+def get_default_page_access():
+    # Required only when applying migration 0001.
+    return {"songs": True, "charts": True, "profile": True, "eval": True}
+
+
+class Banner(models.Model):
+    title = models.CharField(max_length=100)
+    content = models.TextField()
+    image_url = models.CharField(null=True, blank=True)
+    link = models.URLField(null=True, blank=True)
+    button_text = models.CharField(max_length=50, default="了解更多")
+    color = models.CharField(max_length=20, default="#409EFF")
+    priority = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-priority", "-created_at"]
+        verbose_name = verbose_name_plural = "Banner"
+
+    def __str__(self):
+        return self.title
+
+
+class Announcement(models.Model):
+    title = models.CharField(max_length=200)
+    content = models.TextField(help_text="支持 Markdown")
+    category = models.CharField(
+        max_length=20,
+        default="news",
+        choices=[("news", "新闻"), ("event", "活动"), ("notice", "通知")],
+    )
+    priority = models.IntegerField(default=0)
+    is_pinned = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-is_pinned", "-priority", "-created_at"]
+        verbose_name = verbose_name_plural = "公告"
+
+    def __str__(self):
+        return self.title
+
+
+class CompetitionPhase(models.Model):
+    KIND_CHOICES = [
+        ("display", "仅展示"),
+        ("song_selection", "歌曲上传与抽选"),
+        ("submission", "谱面投稿"),
+        ("review", "评分"),
+    ]
+    name = models.CharField(max_length=100)
+    phase_key = models.CharField(max_length=50, unique=True)
+    kind = models.CharField(max_length=30, choices=KIND_CHOICES, default="display")
+    description = models.TextField(blank=True)
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField()
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(
+        default=True, verbose_name="启用", help_text="开关不随时间自动修改"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order", "start_time"]
+        verbose_name = verbose_name_plural = "比赛阶段"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(end_time__gt=models.F("start_time")),
+                name="phase_positive_duration",
+            )
+        ]
+
+    @property
+    def status(self):
+        now = timezone.now()
+        if now < self.start_time:
+            return "upcoming"
+        return "active" if now < self.end_time else "ended"
+
+    @property
+    def progress_percent(self):
+        duration = (self.end_time - self.start_time).total_seconds()
+        if duration <= 0:
+            return 0
+        return max(
+            0,
+            min(
+                100,
+                int(
+                    100 * (timezone.now() - self.start_time).total_seconds() / duration
+                ),
+            ),
+        )
+
+    @property
+    def time_remaining(self):
+        if self.status == "ended":
+            return "已结束"
+        remaining = (
+            self.start_time if self.status == "upcoming" else self.end_time
+        ) - timezone.now()
+        return f"{max(0, remaining.days)} 天 {max(0, remaining.seconds // 3600)} 小时"
+
+    def __str__(self):
+        return self.name
+
+
+class ContestSettings(models.Model):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    submissions_open = models.BooleanField(default=True, verbose_name="允许投稿")
+    reviews_open = models.BooleanField(default=True, verbose_name="允许评分")
+    reviews_per_chart = models.PositiveIntegerField(
+        default=8, validators=[MinValueValidator(1)], verbose_name="每谱目标评分数"
+    )
+    max_score = models.DecimalField(
+        max_digits=7,
+        decimal_places=2,
+        default=50,
+        validators=[MinValueValidator(Decimal("0.25"))],
+        verbose_name="满分",
+    )
+    max_favorites = models.PositiveIntegerField(
+        default=3, verbose_name="每人真爱票上限"
+    )
+
+    class Meta:
+        verbose_name = verbose_name_plural = "比赛配置"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(id=1), name="one_contest_settings"
+            )
+        ]
+
+    @classmethod
+    def current(cls):
+        return cls.objects.get_or_create(pk=1)[0]
+
+    def __str__(self):
+        return "比赛配置"
 
 
 class Song(models.Model):
-    """用户上传的歌曲模型"""
-    
-    # 主键
     id = models.AutoField(primary_key=True)
-    
-    # 唯一标识（内部使用，用于去重识别）
-    unique_key = models.UUIDField(
-        default=uuid.uuid4,
-        editable=False,
-        unique=True
-    )
-    
-    # 用户关系（ForeignKey 允许多首歌）
+    unique_key = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='songs'
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="songs"
     )
-    
-    # 歌曲信息
-    title = models.CharField(
-        max_length=100,
-        help_text='歌曲标题'
-    )
-    audio_file = models.FileField(
-        upload_to=get_audio_filename,
-        help_text='音频文件'
-    )
-    cover_image = models.ImageField(
-        upload_to=get_cover_filename,
-        null=True,
-        blank=True,
-        help_text='封面图片（可选）'
-    )
-    background_video = models.FileField(
-        upload_to=get_video_filename,
-        null=True,
-        blank=True,
-        help_text='背景视频（bg.mp4或pv.mp4，最大20MB，可选）'
-    )
-    netease_url = models.URLField(
-        null=True,
-        blank=True,
-        help_text='网易云音乐链接（可选）'
-    )
-    
-    # 文件标识和大小
-    audio_hash = models.CharField(
-        max_length=64,
-        db_index=True,
-        help_text='音频文件 SHA256 hash，用于识别重复'
-    )
-    file_size = models.IntegerField(
-        help_text='音频文件大小（字节）'
-    )
-    
-    # 时间戳
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text='创建时间'
-    )
-    updated_at = models.DateTimeField(
-        auto_now=True,
-        help_text='最后更新时间'
-    )
-    
-    class Meta:
-        ordering = ['-id']  # 最新的歌曲在前
-        verbose_name = '歌曲'
-        verbose_name_plural = '歌曲'
-    
-    def __str__(self):
-        return f"#{self.id} - {self.title} (by {self.user.username})"
-    
-    def delete(self, *args, **kwargs):
-        """删除歌曲时同时删除关联文件"""
-        if self.audio_file:
-            self.audio_file.delete(save=False)
-        if self.cover_image:
-            self.cover_image.delete(save=False)
-        if self.background_video:
-            self.background_video.delete(save=False)
-        super().delete(*args, **kwargs)
-
-
-class BiddingRound(models.Model):
-    """竞标轮次（统一支持歌曲和谱面竞标）"""
-    
-    STATUS_CHOICES = [
-        ('pending', '待开始'),
-        ('active', '进行中'),
-        ('completed', '已完成'),
-    ]
-    
-    BIDDING_TYPE_CHOICES = [
-        ('song', '歌曲竞标'),
-        ('chart', '谱面竞标'),
-    ]
-    
-    # 关联比赛阶段
-    competition_phase = models.ForeignKey(
+    phase = models.ForeignKey(
         CompetitionPhase,
-        on_delete=models.CASCADE,
-        related_name='bidding_rounds',
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
-        help_text='所属比赛阶段（可选，用于与比赛流程关联）'
+        related_name="songs",
     )
-    
-    # 竞标类型
-    bidding_type = models.CharField(
-        max_length=20,
-        choices=BIDDING_TYPE_CHOICES,
-        default='song',
-        help_text='竞标类型：歌曲竞标或谱面竞标'
+    title = models.CharField(max_length=100)
+    audio_file = models.FileField(upload_to=get_audio_filename)
+    cover_image = models.ImageField(upload_to=get_cover_filename, null=True, blank=True)
+    background_video = models.FileField(
+        upload_to=get_video_filename, null=True, blank=True
     )
-    
-    name = models.CharField(
-        max_length=100,
-        help_text='竞标轮次名称'
-    )
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='pending',
-        help_text='竞标状态'
-    )
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text='创建时间'
-    )
-    started_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text='开始时间'
-    )
-    completed_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text='完成时间'
-    )
-    
-    
-    # 新增加的控制访问字段
-    allow_public_view = models.BooleanField(
-        default=True, 
-        verbose_name="允许公开查看竞标",
-        help_text="如果关闭，只有管理员能看到竞标列表，普通用户（包括竞标者）无法查看。"
-    )
+    netease_url = models.URLField(null=True, blank=True)
+    audio_hash = models.CharField(max_length=64, db_index=True)
+    file_size = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
     class Meta:
-        verbose_name = '竞标轮次'
-        verbose_name_plural = '竞标轮次'
-        ordering = ['-created_at']
-    
+        ordering = ["-id"]
+        verbose_name = verbose_name_plural = "歌曲素材"
+
     def __str__(self):
-        type_display = self.get_bidding_type_display()
-        return f"{self.name} ({type_display} - {self.get_status_display()})"
-
-
-class Bid(models.Model):
-    """用户竞标（用户对歌曲或谱面的出价）"""
-    
-    BID_TYPE_CHOICES = [
-        ('song', '歌曲竞标'),
-        ('chart', '谱面竞标'),
-    ]
-    
-    bidding_round = models.ForeignKey(
-        BiddingRound,
-        on_delete=models.CASCADE,
-        related_name='bids',
-        help_text='所属竞标轮次'
-    )
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='bids',
-        help_text='竞标用户'
-    )
-    
-    # 竞标类型（与BiddingRound.bidding_type对应）
-    bid_type = models.CharField(
-        max_length=20,
-        choices=BID_TYPE_CHOICES,
-        default='song',
-        help_text='竞标类型：歌曲或谱面'
-    )
-    
-    # 竞标目标（二选一）
-    song = models.ForeignKey(
-        Song,
-        on_delete=models.CASCADE,
-        related_name='bids',
-        null=True,
-        blank=True,
-        help_text='目标歌曲（仅当bid_type=song时使用）'
-    )
-    chart = models.ForeignKey(
-        'Chart',
-        on_delete=models.CASCADE,
-        related_name='bids',
-        null=True,
-        blank=True,
-        help_text='目标谱面（仅当bid_type=chart时使用）'
-    )
-    
-    amount = models.IntegerField(
-        help_text='竞标金额（代币）'
-    )
-    is_dropped = models.BooleanField(
-        default=False,
-        help_text='是否已被drop（被更高出价者获得）'
-    )
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text='竞标时间'
-    )
-    updated_at = models.DateTimeField(
-        auto_now=True,
-        help_text='最后更新时间'
-    )
-    
-    class Meta:
-        verbose_name = '竞标'
-        verbose_name_plural = '竞标'
-        ordering = ['-amount', '-created_at']
-    
-    def __str__(self):
-        target = self.song.title if self.song else (f"{self.chart.user.username}的谱面" if self.chart else "未知")
-        return f"{self.user.username} 竞标 {target} - {self.amount}代币"
-    
-    def clean(self):
-        """验证竞标"""
-        # 验证bid_type与song/chart的一致性
-        if self.bid_type == 'song' and not self.song:
-            raise ValidationError('歌曲竞标必须指定目标歌曲')
-        if self.bid_type == 'chart' and not self.chart:
-            raise ValidationError('谱面竞标必须指定目标谱面')
-        if self.song and self.chart:
-            raise ValidationError('不能同时竞标歌曲和谱面')
-        if not self.song and not self.chart:
-            raise ValidationError('必须指定竞标目标（歌曲或谱面）')
-        
-        # 对于谱面竞标，已改为可以竞标自己的谱面
-        # if self.bid_type == 'chart' and self.chart and self.chart.user == self.user:
-        #     raise ValidationError('不能竞标自己的谱面')
-        
-        # 验证用户在该轮次中的竞标数量不超过限制
-        bid_count = Bid.objects.filter(
-            bidding_round=self.bidding_round,
-            user=self.user,
-            is_dropped=False
-        ).exclude(id=self.id).count()
-        
-        if bid_count >= MAX_BIDS_PER_USER:
-            raise ValidationError(
-                f'超过每轮最多竞标 {MAX_BIDS_PER_USER} 个的限制'
-            )
-        
-        # 验证竞标金额
-        if self.amount <= 0:
-            raise ValidationError('竞标金额必须大于0')
-    
-    @property
-    def target(self):
-        """获取竞标目标对象（song或chart）"""
-        return self.song if self.bid_type == 'song' else self.chart
-
-
-
-class BidResult(models.Model):
-    """竞标结果（分配结果）"""
-    
-    ALLOCATION_TYPE_CHOICES = [
-        ('win', '中标'),
-        ('random', '随机分配'),
-    ]
-    
-    BID_TYPE_CHOICES = [
-        ('song', '歌曲竞标'),
-        ('chart', '谱面竞标'),
-    ]
-    
-    bidding_round = models.ForeignKey(
-        BiddingRound,
-        on_delete=models.CASCADE,
-        related_name='results',
-        help_text='所属竞标轮次'
-    )
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='bid_results',
-        help_text='获得歌曲或谱面的用户'
-    )
-    
-    # 分配类型
-    bid_type = models.CharField(
-        max_length=20,
-        choices=BID_TYPE_CHOICES,
-        default='song',
-        help_text='分配类型：歌曲或谱面'
-    )
-    
-    # 分配的目标（二选一）
-    song = models.ForeignKey(
-        Song,
-        on_delete=models.CASCADE,
-        related_name='bid_results',
-        null=True,
-        blank=True,
-        help_text='分配的歌曲（仅当bid_type=song时使用）'
-    )
-    chart = models.ForeignKey(
-        'Chart',
-        on_delete=models.CASCADE,
-        related_name='bid_results',
-        null=True,
-        blank=True,
-        help_text='分配的谱面（仅当bid_type=chart时使用）'
-    )
-    
-    bid_amount = models.IntegerField(
-        help_text='最终成交的竞标金额'
-    )
-    allocation_type = models.CharField(
-        max_length=20,
-        choices=ALLOCATION_TYPE_CHOICES,
-        default='win',
-        help_text='分配类型（中标或随机分配）'
-    )
-    allocated_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text='分配时间'
-    )
-    
-    class Meta:
-        verbose_name = '竞标结果'
-        verbose_name_plural = '竞标结果'
-        ordering = ['-allocated_at']
-    
-    def __str__(self):
-        allocation_type_display = self.get_allocation_type_display()
-        target = self.song.title if self.song else (f"{self.chart.user.username}的谱面" if self.chart else "未知")
-        return f"{self.user.username} {allocation_type_display} {target} - {self.bid_amount}代币"
-    
-    def clean(self):
-        """验证分配结果"""
-        if self.bid_type == 'song' and not self.song:
-            raise ValidationError('歌曲分配必须指定目标歌曲')
-        if self.bid_type == 'chart' and not self.chart:
-            raise ValidationError('谱面分配必须指定目标谱面')
-        if self.song and self.chart:
-            raise ValidationError('不能同时分配歌曲和谱面')
-        if not self.song and not self.chart:
-            raise ValidationError('必须指定分配目标（歌曲或谱面）')
-    
-    @property
-    def target(self):
-        """获取分配目标对象（song或chart）"""
-        return self.song if self.bid_type == 'song' else self.chart
+        return self.title
 
 
 class Chart(models.Model):
-    """用户提交的谱面（beatmap）"""
-    
-    STATUS_CHOICES = [
-        ('part_submitted', '半成品'),
-        ('final_submitted', '完稿'),
-        ('under_review', '评分中'),
-        ('reviewed', '已评分'),
+    STATUS_CHOICES = [("submitted", "已投稿"), ("archived", "历史归档")]
+    SYNC_CHOICES = [
+        ("pending", "待同步"),
+        ("syncing", "同步中"),
+        ("synced", "已同步"),
+        ("failed", "同步失败"),
+        ("unknown", "需核对远端结果"),
+        ("disabled", "未启用同步"),
     ]
-    
-    # 关系
-    bidding_round = models.ForeignKey(
-        BiddingRound,
-        on_delete=models.CASCADE,
-        related_name='charts',
-        help_text='所属竞标轮次'
-    )
     user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='charts',
-        help_text='谱面创建者'
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="charts"
     )
-    song = models.ForeignKey(
-        Song,
-        on_delete=models.CASCADE,
-        related_name='charts',
-        help_text='谱面对应的歌曲'
+    # Historical shared authorship is retained without any two-stage workflow.
+    contributors = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True, related_name="contributed_charts"
     )
-    bid_result = models.ForeignKey(
-        BidResult,
-        on_delete=models.CASCADE,
-        related_name='charts',
-        null=True,
-        blank=True,
-        help_text='对应的竞标结果（第一部分必需，第二部分可选）'
+    source_song = models.ForeignKey(
+        Song, null=True, blank=True, on_delete=models.SET_NULL, related_name="charts"
     )
-    
-    # 谱面信息
+    title = models.CharField(max_length=200, default="")
+    designer = models.CharField(max_length=100, default="未填写")
     status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='part_submitted',
-        help_text='谱面状态'
+        max_length=20, choices=STATUS_CHOICES, default="submitted"
     )
-    designer = models.CharField(
-        max_length=100,
-        default='未填写',
-        help_text='谱师名义'
-    )
-
-    # 上传资源（第一阶段半成品需要打包文件）
     audio_file = models.FileField(
-        upload_to=get_chart_audio_filename,
-        null=True,
-        blank=True,
-        help_text='谱面对应音频文件'
+        upload_to=get_chart_audio_filename, null=True, blank=True
     )
     cover_image = models.ImageField(
-        upload_to=get_chart_cover_filename,
-        null=True,
-        blank=True,
-        help_text='谱面封面图片'
+        upload_to=get_chart_cover_filename, null=True, blank=True
     )
     background_video = models.FileField(
-        upload_to=get_chart_video_filename,
-        null=True,
-        blank=True,
-        help_text='谱面背景视频（可选）'
+        upload_to=get_chart_video_filename, null=True, blank=True
     )
-    
-    # 谱面文件（本地托管，文件名固定为maidata.txt）
-    chart_file = models.FileField(
-        upload_to=get_chart_filename,
-        null=True,
-        blank=True,
-        help_text='谱面文件（maidata.txt）'
+    chart_file = models.FileField(upload_to=get_chart_filename, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    submission_key = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    net_sync_status = models.CharField(
+        max_length=16, choices=SYNC_CHOICES, default="pending"
     )
-    
-    # 时间戳
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text='创建时间'
-    )
-    submitted_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text='提交时间'
-    )
-    review_completed_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text='评分完成时间'
-    )
-    
-    # 评分统计（冗余字段，便于查询）
-    review_count = models.IntegerField(
-        default=0,
-        help_text='收到的评分数'
-    )
-    total_score = models.IntegerField(
-        default=0,
-        help_text='总评分（用于快速计算平均分）'
-    )
-    average_score = models.FloatField(
-        default=0.0,
-        help_text='平均分（0-50）'
-    )
-    
-    # 二部分谱面支持（第二轮竞标续写）
-    is_part_one = models.BooleanField(
-        default=True,
-        help_text='是否是第一部分谱面（True=第一部分，False=第二部分）'
-    )
-    part_one_chart = models.OneToOneField(
-        'self',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='part_two_chart',
-        help_text='如果是第二部分，指向对应的第一部分谱面'
-    )
-    completion_bid_result = models.ForeignKey(
-        BidResult,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='completion_charts',
-        help_text='第二轮竞标获得的一部分，用于续写'
-    )
-    
+    net_sync_error = models.TextField(blank=True)
+    net_url = models.URLField(blank=True, max_length=1000)
+    net_response = models.JSONField(default=dict, blank=True)
+    net_synced_at = models.DateTimeField(null=True, blank=True)
+    legacy_metadata = models.JSONField(default=dict, blank=True)
+
     class Meta:
-        verbose_name = '谱面'
-        verbose_name_plural = '谱面'
-        ordering = ['-created_at']
-        # 一个用户对同一歌曲在同一轮中只能提交一个谱面
-        unique_together = ('bidding_round', 'user', 'song')
-    
+        ordering = ["-created_at"]
+        verbose_name = verbose_name_plural = "谱面"
+
     def __str__(self):
-        part_info = '（二部分）' if not self.is_part_one else ''
-        return f"{self.user.username} - {self.song.title} {part_info}({self.get_status_display()})"
-    
-    def delete(self, *args, **kwargs):
-        """删除谱面时同时删除关联的谱面文件"""
-        if self.chart_file:
-            self.chart_file.delete(save=False)
-        if self.audio_file:
-            self.audio_file.delete(save=False)
-        if self.cover_image:
-            self.cover_image.delete(save=False)
-        if self.background_video:
-            self.background_video.delete(save=False)
-        super().delete(*args, **kwargs)
+        return f"{self.title} — {self.designer}"
 
 
 class PeerReviewAllocation(models.Model):
-    """互评任务分配（保证每个选手收到8个评分，每个评分者评分8个选手）"""
-    
-    bidding_round = models.ForeignKey(
-        BiddingRound,
-        on_delete=models.CASCADE,
-        related_name='peer_review_allocations',
-        help_text='所属竞标轮次'
-    )
-    
-    # 分配信息
     reviewer = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='assigned_peer_reviews',
-        help_text='评分者'
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="assigned_peer_reviews",
     )
-    
     chart = models.ForeignKey(
-        Chart,
-        on_delete=models.CASCADE,
-        related_name='review_allocations',
-        help_text='被评分的谱面'
+        Chart, on_delete=models.CASCADE, related_name="review_allocations"
     )
-    
-    # 状态
-    STATUS_CHOICES = [
-        ('pending', '待评分'),
-        ('completed', '已完成'),
-    ]
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='pending',
-        help_text='任务状态'
-    )
-    
-    # 时间戳
-    allocated_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text='分配时间'
-    )
-    
+    allocated_at = models.DateTimeField(auto_now_add=True)
+
     class Meta:
-        verbose_name = '互评分配'
-        verbose_name_plural = '互评分配'
-        ordering = ['allocated_at']
-        # 同一个评分者不能多次评同一个谱面
-        unique_together = ('reviewer', 'chart')
-    
+        ordering = ["allocated_at"]
+        unique_together = ("reviewer", "chart")
+        verbose_name = verbose_name_plural = "评分任务"
+
     def __str__(self):
-        return f"{self.reviewer.username} -> {self.chart.user.username}的{self.chart.song.title}"
+        return f"{self.reviewer} → {self.chart}"
 
 
 class PeerReview(models.Model):
-    """互评打分记录"""
-    
-    # 关系
     allocation = models.OneToOneField(
         PeerReviewAllocation,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='review',
-        help_text='对应的分配任务（系统分配的任务有allocation，额外评分没有）'
+        related_name="review",
     )
-    
     reviewer = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='given_peer_reviews',
-        help_text='评分者'
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="given_peer_reviews",
     )
-    
-    chart = models.ForeignKey(
-        Chart,
-        on_delete=models.CASCADE,
-        related_name='reviews',
-        help_text='被评分的谱面'
+    chart = models.ForeignKey(Chart, on_delete=models.CASCADE, related_name="reviews")
+    score = models.DecimalField(
+        max_digits=7, decimal_places=2, validators=[MinValueValidator(0)]
     )
-    
-    # 评分内容
-    score = models.IntegerField(
-        help_text='评分'
-    )
-    
-    comment = models.TextField(
-        blank=True,
-        null=True,
-        help_text='评论（可选）'
-    )
-    
-    favorite = models.BooleanField(
-        default=False,
-        help_text='是否标记为喜欢',
-        null=False,
-        blank=False
-    )
-    # 时间戳
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text='评分时间'
-    )
-    
+    comment = models.TextField(blank=True, default="")
+    favorite = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
     class Meta:
-        verbose_name = '互评记录'
-        verbose_name_plural = '互评记录'
-        ordering = ['-created_at']
-    
-    def __str__(self):
-        return f"{self.reviewer.username} 给 {self.chart.user.username} 打分 {self.score}"
-    
-    def clean(self):
-        """验证评分"""
-        if self.score < 0 or self.score > PEER_REVIEW_MAX_SCORE:
-            raise ValidationError(
-                f'评分必须在0-{PEER_REVIEW_MAX_SCORE}之间'
+        ordering = ["-created_at"]
+        verbose_name = verbose_name_plural = "评分记录"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["reviewer", "chart"], name="one_review_per_person_chart"
             )
+        ]
 
 
-# ==================== 第二轮竞标系统（已废弃，使用统一的Bid系统） ====================
-# 注意：以下代码已被注释，现在使用统一的Bid/BidResult系统来处理歌曲和谱面竞标
-# 请使用 BiddingRound.bidding_type='chart' 来进行谱面竞标
+class SongDraw(models.Model):
+    phase = models.OneToOneField(
+        CompetitionPhase, on_delete=models.PROTECT, related_name="draw"
+    )
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = verbose_name_plural = "歌曲抽选"
+
+    def __str__(self):
+        return self.phase.name
+
+
+class SongDrawEntry(models.Model):
+    draw = models.ForeignKey(SongDraw, on_delete=models.CASCADE, related_name="entries")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    song = models.ForeignKey(Song, on_delete=models.PROTECT, null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["draw", "user"], name="one_draw_entry_per_person"
+            )
+        ]
+
+
+class LegacyRecord(models.Model):
+    kind = models.CharField(max_length=60)
+    original_id = models.PositiveIntegerField()
+    data = models.JSONField()
+
+    class Meta:
+        verbose_name = verbose_name_plural = "旧业务归档"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["kind", "original_id"], name="unique_legacy_record"
+            )
+        ]
