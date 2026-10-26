@@ -30,6 +30,7 @@ from .reviews import allocate_reviews
 from .draws import run_draw
 from .exports import export_peer_review_scores
 from .majdata_service import sync_chart
+from .bundles import BundleError, chart_bundle_response
 
 
 @admin.register(Announcement)
@@ -309,7 +310,7 @@ class ChartAdmin(admin.ModelAdmin):
         "created_at",
         "submitted_at",
     )
-    actions = ["retry_net", "export_scores"]
+    actions = ["download_charts", "retry_net", "export_scores"]
 
     def has_add_permission(self, request):
         return False
@@ -343,6 +344,15 @@ class ChartAdmin(admin.ModelAdmin):
         )
         response["Content-Disposition"] = 'attachment; filename="scores.xlsx"'
         return response
+
+    @admin.action(description="批量下载所选谱面（ZIP）", permissions=["view"])
+    def download_charts(self, request, queryset):
+        try:
+            return chart_bundle_response(
+                queryset.order_by("id").iterator(), filename="charts.zip", batch=True
+            )
+        except BundleError as error:
+            self.message_user(request, str(error), level=messages.ERROR)
 
 
 class ReadOnlyAdmin(admin.ModelAdmin):

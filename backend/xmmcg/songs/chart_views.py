@@ -1,10 +1,6 @@
-from io import BytesIO
-from pathlib import PurePosixPath
 from uuid import UUID
-from zipfile import ZipFile, ZIP_DEFLATED
 
 from django.db import IntegrityError, transaction
-from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
@@ -16,6 +12,7 @@ from .models import Chart, Competition
 from .phases import require_capability
 from .serializers import ChartSerializer, ChartUploadSerializer
 from .uploads import discard_new_assets, store_new_assets
+from .bundles import chart_bundle_response
 
 
 def chart_list(queryset, request):
@@ -130,22 +127,4 @@ def download_bundle(request, chart_id):
     chart = get_object_or_404(
         Chart, pk=chart_id, competition=Competition.current(), status="submitted"
     )
-    output = BytesIO()
-    with ZipFile(output, "w", ZIP_DEFLATED) as archive:
-        for name, stem in (
-            ("chart_file", "maidata"),
-            ("audio_file", "track"),
-            ("cover_image", "bg"),
-            ("background_video", "bg"),
-        ):
-            field = getattr(chart, name)
-            if not field:
-                continue
-            if name == "background_video" and PurePosixPath(
-                field.name
-            ).name.lower().startswith("pv"):
-                stem = "pv"
-            with field.open("rb") as stream:
-                archive.writestr(stem + PurePosixPath(field.name).suffix, stream.read())
-    output.seek(0)
-    return FileResponse(output, as_attachment=True, filename=f"chart-{chart.pk}.zip")
+    return chart_bundle_response([chart], filename=f"chart-{chart.pk}.zip")
