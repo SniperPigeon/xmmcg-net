@@ -147,3 +147,16 @@ class NetProtocolTests(TestCase):
             ]
             with self.assertRaises(ValueError):
                 upload_chart(chart)
+
+
+class CorsPreservationTests(SimpleTestCase):
+    def test_existing_cors_rules_are_preserved(self):
+        from songs.management.commands.configure_r2_cors import merge_cors_rules
+
+        existing = [
+            {"AllowedOrigins": ["https://other.example.com"], "AllowedMethods": ["PUT"]}
+        ]
+        desired = cors_policy(["https://contest.example.com"])["CORSRules"]
+        merged = merge_cors_rules(existing, desired)
+        self.assertEqual(merged[0], existing[0])
+        self.assertEqual(merge_cors_rules(merged, desired), merged)

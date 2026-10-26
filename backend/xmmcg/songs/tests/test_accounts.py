@@ -99,3 +99,28 @@ class AccountTests(TestCase):
             400,
         )
         self.assertEqual(UserProfile.objects.count(), 1)
+
+    def test_existing_profile_put_and_chinese_response_are_preserved(self):
+        self.client.force_authenticate(self.main)
+        response = self.client.put(
+            "/api/users/profile/", {"preferred_name": "原有中文名义"}, format="json"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["success"])
+        self.assertEqual(response.data["message"], "个人信息已更新")
+        self.assertEqual(response.data["user"]["preferred_name"], "原有中文名义")
+
+    def test_password_change_keeps_original_session_invalidation(self):
+        client = APIClient()
+        client.force_login(self.main)
+        response = client.post(
+            "/api/users/change-password/",
+            {
+                "old_password": "long-password-902",
+                "new_password": "different-password-903",
+                "new_password_confirm": "different-password-903",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(client.get("/api/users/me/").status_code, 403)

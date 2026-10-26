@@ -1,6 +1,6 @@
 from .settings import *  # noqa: F403
 
-DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}}
+DATABASES = {"default": {**DATABASES["default"], "NAME": ":memory:"}}  # noqa: F405
 STORAGES = {
     "default": {"BACKEND": "songs.tests.storage.ObjectStorage"},
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
