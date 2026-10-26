@@ -1,0 +1,33 @@
+name: Checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: backend/xmmcg/requirements.lock
+      - run: pip install -r backend/xmmcg/requirements.lock ruff==0.15.14
+      - run: ruff check backend/xmmcg
+      - run: python backend/xmmcg/manage.py makemigrations --check --dry-run --settings=xmmcg.test_settings
+      - run: python backend/xmmcg/manage.py test songs.tests --settings=xmmcg.test_settings --noinput
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: front
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: front/package-lock.json
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run build
