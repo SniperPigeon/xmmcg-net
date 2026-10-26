@@ -1,53 +1,14 @@
-# XMMCG 前端项目
+# 前端
 
-基于 Vue 3 + Vite + Element Plus 的谱面创作竞赛平台前端。
+Node.js 22.12+，Vue 3 + Vite + Element Plus。
 
-## 技术栈
-
-- Vue 3 (Composition API)
-- Vue Router 4
-- Element Plus
-- Axios
-- Vite
-
-## 安装依赖
-
-```bash
-npm install
-```
-
-## 开发运行
-
-```bash
+```sh
+npm ci
 npm run dev
-```
-
-访问 http://localhost:5173
-
-## 构建生产版本
-
-```bash
 npm run build
+npm run format:check
 ```
 
-## 项目结构
+开发时 `/api/` 代理到 `127.0.0.1:8000`。生产默认同源 API，可用 `VITE_API_BASE_URL` 修改构建地址。不要在 `VITE_*` 变量中放入 R2 或 Net 凭证。
 
-```
-src/
-├── main.js           # 入口文件
-├── App.vue           # 根组件
-├── router/           # 路由配置
-├── views/            # 页面组件
-├── components/       # 公共组件
-├── api/              # API 请求
-├── assets/           # 静态资源
-└── styles/           # 样式文件
-```
-
-## 功能模块
-
-- 首页：比赛状态、轮换Banner、富文本公告
-- 歌曲管理
-- 谱面管理
-- 用户认证（登录/注册）
-- 个人中心
+投稿、选歌、评分分别调用独立 API；页面权限由后端返回的 capabilities 决定，身份使用实际 Session 检查。资源 URL 由后端返回，前端不拼接本地 `/media/` 路径。

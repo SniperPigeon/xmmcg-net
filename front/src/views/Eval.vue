@@ -1,521 +1,198 @@
 <template>
-  <div class="eval-container">
-    <el-card class="header-card">
-      <div class="header">
-        <h3>
-          <el-icon><Edit /></el-icon>
-          评分任务
-        </h3>
-        <el-alert
-          :title="`当前允许的分数最大值：${maxScore} 分`"
-          type="info"
-          :closable="false"
-          show-icon
-        />
-      </div>
-    </el-card>
-
-    <!-- 权限提示 -->
-    <el-alert
-      v-if="!canReview"
-      title="只有提交过完成稿谱面的用户可以进行评分"
-      type="warning"
-      :closable="false"
-      show-icon
-      style="margin-bottom: 20px;"
-    />
-
-    <!-- 加载中 -->
+  <div class="eval-page">
+    <h2>评分任务</h2>
+    <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <el-skeleton v-if="loading" :rows="5" animated />
-
-    <!-- 评分任务列表 -->
-    <div v-else-if="canReview" class="tasks-section">
-      <el-card>
-        <template #header>
-          <div class="card-header">
-            <span>我的评分任务（{{ reviewTasks.length }}）</span>
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <el-tag :type="favoriteRemaining === 0 ? 'danger' : 'warning'" size="small">
-                <el-icon style="vertical-align: middle; margin-right: 3px;"><StarFilled /></el-icon>
-                真爱票：{{ favoriteCount }} / {{ MAX_FAVORITES }}
-              </el-tag>
-              <el-button type="primary" size="small" @click="showAddExtraDialog">
-                添加额外谱面
-              </el-button>
-            </div>
-          </div>
-        </template>
-
-        <el-empty v-if="reviewTasks.length === 0" description="暂无评分任务" />
-        
-        <div v-else class="tasks-list">
-        <div 
-          v-for="(task, index) in reviewTasks" 
-          :key="task.allocation_id || `extra-${task.chart_id}`"
-          class="task-item"
-        >
-          <div class="task-info">
-            <span class="task-title">{{ getTaskDisplayName(task) }}</span>
-            <el-tag v-if="task.isExtra" type="warning" size="small" style="margin-left: 10px;">额外</el-tag>
-          </div>
-          
-          <div class="task-actions" style="display: flex; align-items: center;">
-            <el-input
-              v-model="task.comments"
-              type="textarea"
-              :rows="1"
-              autosize
-              placeholder="请输入评语" 
-              style="width: 300px; margin-right: 15px;"
-            /> <!-- FIXME 评语并未被传到后端 -->
-
-            <el-input-number
-              v-model="task.score"
-              :min="0"
-              :max="maxScore"
-              :precision="2"
-              :step="0.25"
-              placeholder="请输入分数"
-              style="width: 150px;"
-            />
-
-              <el-tooltip
-                :content="task.favorite ? '取消真爱票' : (favoriteRemaining === 0 ? `真爱票已用完（${MAX_FAVORITES}/${MAX_FAVORITES}）` : `设为真爱票（剩余 ${favoriteRemaining} 张）`)"
-                placement="top"
-              >
-                <el-button
-                  type="text"
-                  @click="toggleFavorite(task)"
-                  :disabled="!task.favorite && favoriteRemaining === 0"
-                  style="margin-left: 10px; padding: 0;"
-                >
-                  <el-icon
-                    :size="24"
-                    :color="task.favorite ? 'var(--el-color-danger)' : (favoriteRemaining === 0 ? 'var(--el-text-color-disabled)' : 'var(--el-text-color-placeholder)')"
-                    style="transition: color 0.3s;"
-                  >
-                    <component :is="task.favorite ? StarFilled : Star" />
-                  </el-icon>
-                </el-button>
-              </el-tooltip>
-            <el-button 
-              v-if="task.isExtra" 
-              type="danger" 
-              size="small" 
-              @click="removeExtraTask(index)"
-              style="margin-left: 10px;"
-            >
-              删除
-            </el-button>
-          </div>
+    <template v-else>
+      <el-alert
+        v-if="!canReview"
+        title="提交谱面后可参与评分，绑定账号的投稿也计入"
+        type="info"
+        :closable="false"
+      />
+      <el-alert
+        v-else-if="!isOpen"
+        title="评分尚未开放或已截止，已提交评分仍可查看"
+        type="info"
+        :closable="false"
+      />
+      <p>满分 {{ config.max_score }} · 真爱票 {{ favoriteTotal }} / {{ config.max_favorites }}</p>
+      <el-button v-if="canReview && isOpen" @click="showExtra">添加额外谱面</el-button>
+      <el-empty v-if="!tasks.length" description="暂无评分任务" />
+      <el-card v-for="(task, index) in tasks" :key="task.chart_id" class="task">
+        <div class="heading">
+          <strong>{{ task.title }} · {{ task.designer }}</strong
+          ><el-tag>{{
+            task.completed ? '已提交' : task.allocation_id ? '分配任务' : '额外评分'
+          }}</el-tag>
         </div>
-      </div>
-
-        <div v-if="reviewTasks.length > 0" class="submit-section">
-          <el-button 
-            type="success" 
-            size="large"
-            :loading="submitting"
-            @click="submitReviews"
+        <div class="score-row">
+          <el-input-number
+            v-model="task.score"
+            :min="0"
+            :max="Number(config.max_score)"
+            :precision="2"
+            :step="0.25"
+            :disabled="task.completed || !isOpen"
+            aria-label="评分"
+          />
+          <el-checkbox
+            v-model="task.favorite"
+            :disabled="
+              task.completed || !isOpen || (!task.favorite && favoriteTotal >= config.max_favorites)
+            "
+            >真爱票</el-checkbox
           >
-            提交评分
-          </el-button>
+          <el-button
+            v-if="!task.completed && !task.allocation_id"
+            type="danger"
+            link
+            @click="tasks.splice(index, 1)"
+            >移除</el-button
+          >
+          <el-button link @click="download(task.chart_id)">下载谱面</el-button>
         </div>
-      </el-card>
-    </div>
-
-    <!-- 添加额外谱面对话框 -->
-    <el-dialog 
-      v-model="extraDialogVisible" 
-      title="添加额外谱面" 
-      width="600px"
-    >
-      <el-select 
-        v-model="selectedExtraChart" 
-        placeholder="请选择要评分的谱面" 
-        filterable
-        style="width: 100%;"
-      >
-        <el-option
-          v-for="chart in availableCharts"
-          :key="chart.id"
-          :label="getChartDisplayName(chart)"
-          :value="chart.id"
+        <el-input
+          v-model="task.comment"
+          type="textarea"
+          :rows="2"
+          maxlength="20000"
+          placeholder="评语（可选）"
+          :disabled="task.completed || !isOpen"
         />
-      </el-select>
-      
-      <template #footer>
-        <el-button @click="extraDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="addExtraTask">添加</el-button>
-      </template>
+      </el-card>
+      <el-button
+        v-if="canReview && isOpen && pending.length"
+        type="primary"
+        :loading="submitting"
+        @click="submit"
+        >提交评分（{{ pending.length }}）</el-button
+      >
+    </template>
+    <el-dialog v-model="extraVisible" title="添加额外谱面" width="min(90vw, 600px)">
+      <el-select v-model="selected" filterable placeholder="选择谱面" style="width: 100%"
+        ><el-option
+          v-for="chart in available"
+          :key="chart.id"
+          :value="chart.id"
+          :label="`${chart.title} · ${chart.designer}`"
+      /></el-select>
+      <template #footer
+        ><el-button @click="extraVisible = false">取消</el-button
+        ><el-button type="primary" @click="addExtra">添加</el-button></template
+      >
     </el-dialog>
   </div>
 </template>
-
-
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Edit } from '@element-plus/icons-vue'
-import { getPeerReviewConfig, getMyReviewTasks, submitReview, submitExtraReview, getMyCharts, getCharts } from '../api'
-import { Star, StarFilled } from '@element-plus/icons-vue'
-
-const MAX_FAVORITES = 3
-
-const loading = ref(true)
-const submitting = ref(false)
-const canReview = ref(false)
-const maxScore = ref(50)
-const reviewTasks = ref([])
-
-// 真爱票统计
-const favoriteCount = computed(() => reviewTasks.value.filter(t => t.favorite).length)
-const favoriteRemaining = computed(() => MAX_FAVORITES - favoriteCount.value)
-
-const toggleFavorite = (task) => {
-  if (task.favorite) {
-    task.favorite = false
-  } else {
-    if (favoriteCount.value >= MAX_FAVORITES) {
-      ElMessage.warning(`真爱票最多只能投 ${MAX_FAVORITES} 张，已全部用完`)
-      return
-    }
-    task.favorite = true
-  }
-}
-
-// 额外评分相关
-const extraDialogVisible = ref(false)
-const selectedExtraChart = ref(null)
-const availableCharts = ref([])
-
-// 加载配置和任务
-const loadData = async () => {
+import { getMyReviewTasks, getReviewableCharts, submitReviews, downloadBundle } from '../api'
+const tasks = ref([]),
+  loading = ref(true),
+  submitting = ref(false),
+  error = ref(''),
+  config = ref({ max_score: 50, max_favorites: 3 })
+const canReview = ref(false),
+  isOpen = ref(false),
+  extraVisible = ref(false),
+  selected = ref(null),
+  available = ref([])
+const pending = computed(() => tasks.value.filter((task) => !task.completed))
+const favoriteTotal = computed(() => tasks.value.filter((task) => task.favorite).length)
+const load = async () => {
   loading.value = true
   try {
-    // 1. 获取最大分数配置
-    const statusRes = await getPeerReviewConfig()
-    maxScore.value = statusRes.peer_review_max_score || 50
-
-    // 2. 直接获取评分任务（不需要round_id）
-    const tasksRes = await getMyReviewTasks()
-    
-    if (!tasksRes.success) {
-      ElMessage.warning(tasksRes.message || '获取评分任务失败')
-      loading.value = false
-      return
-    }
-
-    // 处理评分任务数据
-    reviewTasks.value = tasksRes.tasks?.map(task => ({
-      allocation_id: task.id,  // 后端返回的id就是allocation_id
-      chart_id: task.chart_id,
-      chart_title: task.song_title,  // 后端API返回的是song_title字段
-      designer: task.chart_designer || '未知谱师',  // 后端API返回的是chart_designer字段
-      score: null,
-      comments: '',
-      favorite: false,
-      isExtra: false  // 系统分配的任务不是额外任务
-    })) || []
-    
-    // 如果有任务，允许评分
-    canReview.value = reviewTasks.value.length > 0
-
-  } catch (error) {
-    console.error('加载数据失败:', error)
-    ElMessage.error(error.response?.data?.message || '加载数据失败')
+    const result = await getMyReviewTasks()
+    tasks.value = result.tasks.map((task) => ({
+      ...task,
+      score: task.score === null ? undefined : Number(task.score),
+    }))
+    config.value = result.config
+    canReview.value = result.can_review
+    isOpen.value = result.is_open
+    error.value = ''
+  } catch (err) {
+    error.value = err.message
   } finally {
     loading.value = false
   }
 }
-
-// 验证评分数据
-const validateScores = () => {
-  for (let i = 0; i < reviewTasks.value.length; i++) {
-    const task = reviewTasks.value[i]
-    
-    if (task.score === null || task.score === undefined || task.score === '') {
-      ElMessage.warning(`请为「${task.chart_title}」填写分数`)
-      return false
-    }
-
-    if (task.score < 0) {
-      ElMessage.warning(`「${task.chart_title}」的分数不能为负数`)
-      return false
-    }
-
-    if (task.score > maxScore.value) {
-      ElMessage.warning(`"${task.chart_title}"的分数不能超过${maxScore.value}分`)
-      return false
-    }
-
-    // if (!Number.isInteger(task.score)) {
-    //   ElMessage.warning(`"${task.chart_title}"的分数必须为整数`)
-    //   return false
-    //可以小数
-    //}
-  }
-
-  return true
-}
-
-// 提交评分
-const submitReviews = async () => {
-  if (!validateScores()) {
-    return
-  }
-
-  // 分离系统任务和额外任务
-  const systemTasks = reviewTasks.value.filter(task => task.allocation_id !== null)
-  const extraTasks = reviewTasks.value.filter(task => task.isExtra)
-  const totalTasks = systemTasks.length + extraTasks.length
-  
-  if (totalTasks === 0) {
-    ElMessage.warning('没有可提交的评分')
-    return
-  }
-
+const showExtra = async () => {
   try {
-    let confirmMsg = `确定要提交 ${totalTasks} 个评分吗？`
-    if (systemTasks.length > 0 && extraTasks.length > 0) {
-      confirmMsg += `\n其中：${systemTasks.length} 个系统分配任务，${extraTasks.length} 个额外评分。`
-    }
-    confirmMsg += '\n提交后将无法修改。'
-    
-    await ElMessageBox.confirm(
-      confirmMsg,
-      '确认提交',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
-
+    const selectedIds = new Set(tasks.value.map((task) => task.chart_id))
+    available.value = (await getReviewableCharts()).filter((chart) => !selectedIds.has(chart.id))
+    selected.value = null
+    extraVisible.value = true
+  } catch (err) {
+    ElMessage.error(err.message)
+  }
+}
+const addExtra = () => {
+  const chart = available.value.find((chart) => chart.id === selected.value)
+  if (!chart) return
+  tasks.value.push({
+    chart_id: chart.id,
+    title: chart.title,
+    designer: chart.designer,
+    completed: false,
+    allocation_id: null,
+    score: undefined,
+    comment: '',
+    favorite: false,
+  })
+  extraVisible.value = false
+}
+const submit = async () => {
+  if (pending.value.some((task) => task.score === undefined || task.score === null)) {
+    ElMessage.warning('请填写全部待提交任务的分数')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(`提交 ${pending.value.length} 份评分？提交后不能修改。`, '确认提交')
     submitting.value = true
-
-    // 提交系统分配的任务
-    const systemPromises = systemTasks
-      .filter(task => task.score !== null && task.score !== '')
-      .map(task => submitReview(task.allocation_id, task.score, task.comments, task.favorite))
-
-    // 提交额外评分
-    const extraPromises = extraTasks
-      .filter(task => task.score !== null && task.score !== '')
-      .map(task => submitExtraReview(task.chart_id, task.score, task.comments, task.favorite))
-
-    // 并发提交所有评分
-    await Promise.all([...systemPromises, ...extraPromises])
-
-    ElMessage.success(`评分提交成功！已提交 ${totalTasks} 个评分`)
-    
-    // 重新加载数据
-    await loadData()
-
-  } catch (error) {
-    if (error === 'cancel') {
-      return
-    }
-    console.error('提交失败:', error)
-    ElMessage.error(error.response?.data?.message || '提交失败')
+    await submitReviews(
+      pending.value.map(({ chart_id, score, comment, favorite }) => ({
+        chart_id,
+        score,
+        comment,
+        favorite,
+      })),
+    )
+    ElMessage.success('评分已保存')
+    await load()
+  } catch (err) {
+    if (err !== 'cancel' && err !== 'close') ElMessage.error(err.message)
   } finally {
     submitting.value = false
   }
 }
-
-onMounted(() => {
-  loadData()
-})
-
-// 生成任务显示名称（如果标题重复则附加谱师名义）
-const getTaskDisplayName = (task) => {
-  const title = task.chart_title || '未知标题'
-  const designer = task.designer || '未知谱师'
-  
-  // 检查是否有其他任务使用相同标题
-  const sameTitleTasks = reviewTasks.value.filter(t => t.chart_title === task.chart_title)
-  
-  // 如果有重复标题，附加谱师名义
-  if (sameTitleTasks.length > 1) {
-    return `${title} [${designer}]`
-  }
-  
-  return title
-}
-
-// 生成谱面显示名称（如果标题重复则附加谱师名义）
-const getChartDisplayName = (chart) => {
-  const title = chart.song?.title || '未知标题'  // 修复：歌曲标题在song对象中
-  const designer = chart.designer || '未知谱师'
-  
-  // 检查是否有其他谱面使用相同标题
-  const sameTitleCharts = availableCharts.value.filter(c => c.song?.title === chart.song?.title)
-  
-  // 如果有重复标题，附加谱师名义
-  if (sameTitleCharts.length > 1) {
-    return `${title} [${designer}]`
-  }
-  
-  return title
-}
-
-// 显示添加额外谱面对话框
-const showAddExtraDialog = async () => {
+const download = async (id) => {
   try {
-    // 并发获取所有谱面和用户自己的谱面
-    const [res, myChartsRes] = await Promise.all([
-      getCharts({ page_size: 1000 }),
-      getMyCharts()
-    ])
-
-    // 用户自己的谱面ID集合（含一部分半成品）
-    const myChartIds = new Set((myChartsRes.charts || []).map(c => c.id))
-
-    // 只保留可评分状态、不在任务列表中、且不是自己参与的谱面
-    const reviewableStatuses = ['final_submitted', 'under_review', 'reviewed']
-    const existingChartIds = reviewTasks.value.map(t => t.chart_id)
-    availableCharts.value = (res.results || res || []).filter(chart => {
-      if (!reviewableStatuses.includes(chart.status)) return false
-      if (existingChartIds.includes(chart.id)) return false
-      if (myChartIds.has(chart.id)) return false  // 自己是提交者
-      if (chart.part_one_chart && myChartIds.has(chart.part_one_chart.id)) return false  // 自己是一部分原作者
-      return true
-    })
-    
-    if (availableCharts.value.length === 0) {
-      ElMessage.warning('没有更多谱面可以添加')
-      return
-    }
-    
-    extraDialogVisible.value = true
-  } catch (error) {
-    console.error('获取谱面列表失败:', error)
-    ElMessage.error('获取谱面列表失败')
+    await downloadBundle(id)
+  } catch (err) {
+    ElMessage.error(err.message)
   }
 }
-
-// 添加额外任务
-const addExtraTask = () => {
-  if (!selectedExtraChart.value) {
-    ElMessage.warning('请选择要评分的谱面')
-    return
-  }
-  
-  const chart = availableCharts.value.find(c => c.id === selectedExtraChart.value)
-  if (!chart) return
-  
-  reviewTasks.value.push({
-    allocation_id: null, // 额外任务没有allocation_id
-    chart_id: chart.id,
-    chart_title: chart.song?.title || '未知标题',  // 修复：歌曲标题在song对象中
-    designer: chart.designer || '未知谱师',
-    score: null,
-    comments: '',
-    favorite: false,
-    isExtra: true
-  })
-  
-  ElMessage.success(`已添加「${chart.song?.title || '未知标题'}」到评分任务`)
-  extraDialogVisible.value = false
-  selectedExtraChart.value = null
-}
-
-// 删除额外任务
-const removeExtraTask = (index) => {
-  const task = reviewTasks.value[index]
-  reviewTasks.value.splice(index, 1)
-  ElMessage.info(`已移除「${task.chart_title}」`)
-}
+onMounted(load)
 </script>
-
 <style scoped>
-.eval-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
+.eval-page {
+  max-width: 1000px;
+  margin: auto;
 }
-
-.header-card {
-  margin-bottom: 20px;
+.task {
+  margin: 16px 0;
 }
-
-.header {
+.heading,
+.score-row {
   display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.heading {
   justify-content: space-between;
-  align-items: center;
-  gap: 20px;
-}
-
-.header h3 {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.tasks-section {
-  margin-top: 20px;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.tasks-list {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-.task-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 15px;
-  background-color: var(--el-bg-color-page);
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 8px;
-  transition: all 0.3s;
-}
-
-.task-item:hover {
-  background-color: var(--el-fill-color-light);
-  border-color: var(--el-border-color);
-  box-shadow: 0 2px 8px var(--el-box-shadow-light);
-}
-
-.task-info {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.task-title {
-  font-size: 16px;
-  font-weight: 500;
-  color: var(--el-text-color-primary);
-}
-
-.task-designer {
-  font-size: 14px;
-  color: var(--el-text-color-secondary);
-}
-
-.task-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.submit-section {
-  margin-top: 30px;
-  text-align: center;
-  padding-top: 20px;
-  border-top: 1px solid var(--el-border-color-lighter);
 }
 </style>

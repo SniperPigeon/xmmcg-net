@@ -1,13 +1,13 @@
 <template>
   <div class="phase-timeline-container">
     <h2>竞赛阶段日程</h2>
-    
+
     <el-timeline>
       <el-timeline-item
         v-for="(phase, index) in phases"
         :key="phase.id"
         :timestamp="`${formatDate(phase.start_time)} - ${formatDate(phase.end_time)}`"
-        :placement='"top"'
+        :placement="'top'"
         :type="getPhaseType(phase.status)"
       >
         <div class="phase-item">
@@ -17,39 +17,28 @@
               {{ getPhaseStatusText(phase.status) }}
             </el-tag>
           </div>
-          
+
           <div class="phase-content">
             <p>{{ phase.description }}</p>
-            
+
             <!-- 进度条 -->
-            <el-progress 
+            <el-progress
               :percentage="phase.progress_percent"
               :status="phase.status === 'active' ? 'success' : ''"
               :show-text="true"
             />
-            
+
             <!-- 剩余时间 -->
             <div class="phase-time-info">
               <span v-if="phase.status === 'upcoming'">
                 <strong>距离开始：</strong> {{ phase.time_remaining }}
               </span>
               <span v-else-if="phase.status === 'active'">
-                <strong style="color: #67C23A;">进行中，剩余：</strong> {{ phase.time_remaining }}
+                <strong style="color: #67c23a">进行中，剩余：</strong> {{ phase.time_remaining }}
               </span>
               <span v-else>
                 <strong>已结束</strong>
               </span>
-            </div>
-            
-            <!-- 页面访问权限提示 -->
-            <div class="phase-access-info">
-              <span class="access-title">功能开放：</span>
-              <el-tag v-if="phase.page_access?.songs" type="success" size="small">歌曲竞标</el-tag>
-              <el-tag v-if="phase.page_access?.charts" type="success" size="small">谱面制作</el-tag>
-              <el-tag v-if="phase.page_access?.profile" type="success" size="small">个人中心</el-tag>
-              
-              <el-tag v-if="!phase.page_access?.songs" type="info" size="small" style="opacity: 0.5;">歌曲（锁定）</el-tag>
-              <el-tag v-if="!phase.page_access?.charts" type="info" size="small" style="opacity: 0.5;">谱面（锁定）</el-tag>
             </div>
           </div>
         </div>
@@ -59,17 +48,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { getCompetitionPhases } from '../api/index.js'
 
 const phases = ref([])
+let timer
 
 const formatDate = (dateString) => {
   const date = new Date(dateString)
   return date.toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
-    day: '2-digit'
+    day: '2-digit',
   })
 }
 
@@ -113,7 +103,7 @@ const getPhaseStatusText = (status) => {
 const loadPhases = async () => {
   try {
     // 时间线显示所有阶段（包括未激活的），以便管理员查看完整计划
-    const data = await getCompetitionPhases(true)
+    const data = await getCompetitionPhases()
     phases.value = data
   } catch (error) {
     console.error('加载竞赛阶段失败:', error)
@@ -122,12 +112,13 @@ const loadPhases = async () => {
 
 onMounted(() => {
   loadPhases()
-  
+
   // 每 30 秒刷新一次（更新剩余时间和进度）
-  setInterval(() => {
+  timer = setInterval(() => {
     loadPhases()
   }, 30000)
 })
+onUnmounted(() => clearInterval(timer))
 </script>
 
 <style scoped>

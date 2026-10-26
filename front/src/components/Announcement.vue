@@ -6,7 +6,7 @@
         <span>最新公告</span>
       </div>
     </template>
-    
+
     <el-timeline>
       <el-timeline-item
         v-for="(announcement, index) in announcements"
@@ -27,7 +27,7 @@
         </el-card>
       </el-timeline-item>
     </el-timeline>
-    
+
     <el-empty v-if="announcements.length === 0" description="暂无公告" />
   </el-card>
 </template>
@@ -37,32 +37,33 @@ import { ref, onMounted } from 'vue'
 import { BellFilled } from '@element-plus/icons-vue'
 import { getAnnouncementsFromAPI } from '../api'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 
 const announcements = ref([])
 
 const getCategoryType = (category) => {
   const typeMap = {
-    'news': 'primary',
-    'event': 'success',
-    'notice': 'warning'
+    news: 'primary',
+    event: 'success',
+    notice: 'warning',
   }
   return typeMap[category] || 'primary'
 }
 
 const getCategoryTagType = (category) => {
   const typeMap = {
-    'news': 'info',
-    'event': 'success',
-    'notice': 'warning'
+    news: 'info',
+    event: 'success',
+    notice: 'warning',
   }
   return typeMap[category] || 'info'
 }
 
 const getCategoryLabel = (category) => {
   const labelMap = {
-    'news': '新闻',
-    'event': '活动',
-    'notice': '通知'
+    news: '新闻',
+    event: '活动',
+    notice: '通知',
   }
   return labelMap[category] || category
 }
@@ -76,7 +77,7 @@ const formatTime = (dateString) => {
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     })
   } catch {
     return dateString
@@ -86,7 +87,7 @@ const formatTime = (dateString) => {
 const parseMarkdown = (markdown) => {
   if (!markdown) return ''
   try {
-    return marked(markdown)
+    return DOMPurify.sanitize(marked(markdown))
   } catch {
     return markdown
   }
@@ -173,14 +174,14 @@ onMounted(() => {
 }
 
 .announcement-content :deep(blockquote) {
-  border-left: 4px solid #409EFF;
+  border-left: 4px solid #409eff;
   padding-left: 12px;
   margin: 8px 0;
   color: #606266;
 }
 
 .announcement-content :deep(a) {
-  color: #409EFF;
+  color: #409eff;
   text-decoration: none;
 }
 

@@ -17,7 +17,10 @@
       </div>
       <p>&copy; 2026 xmmcg.net 开源的maimai自制比赛平台</p>
       <p>感谢各位谱师的创作</p>
-      <p>欢迎在<a href="https://github.com/yukunf/xmmcg-net">Github</a>为功能提出反馈，或者Star一下</p>
+      <p>
+        欢迎在<a href="https://github.com/SniperPigeon/xmmcg-net">Github</a
+        >为功能提出反馈，或者Star一下
+      </p>
     </footer>
   </div>
 </template>
@@ -52,19 +55,19 @@ let messageIndex = 0
 const showHarukaMessages = () => {
   // 连续显示3个随机消息
   const messageCount = Math.floor(Math.random() * 3) + 2 // 2-4个消息
-  
+
   for (let i = 0; i < messageCount; i++) {
     setTimeout(() => {
       const randomMessage = harukaMessages[Math.floor(Math.random() * harukaMessages.length)]
-      
+
       ElMessage({
         message: randomMessage,
         type: 'success',
-        duration: 3000 + (i * 500), // 每个消息显示时间递增
+        duration: 3000 + i * 500, // 每个消息显示时间递增
         showClose: true,
         center: false,
         customClass: 'haruka-message',
-        offset: 80 + (i * 60) // 每个消息向下偏移
+        offset: 80 + i * 60, // 每个消息向下偏移
       })
     }, i * 400) // 每个消息间隔400ms出现
   }
@@ -172,7 +175,11 @@ const showHarukaMessages = () => {
 
 /* 可爱的弹跳动画 */
 @keyframes bounce {
-  0%, 20%, 50%, 80%, 100% {
+  0%,
+  20%,
+  50%,
+  80%,
+  100% {
     transform: translateY(0) translateX(-50%);
   }
   40% {

@@ -1,185 +1,144 @@
 <template>
-  <div class="register-page">
-    <el-card class="register-card">
-      <template #header>
-        <div class="card-header">
-          <h2>用户注册</h2>
-        </div>
-      </template> <!-- TODO 增加验证码、邮件找回密码功能。potentially实现majnet账号登陆-->
-      <el-form 
-        ref="registerFormRef" 
-        :model="registerForm" 
-        :rules="rules" 
-        label-width="80px"
-      >
-        <el-form-item label="用户名" prop="username">
-          <el-input 
-            v-model="registerForm.username" 
-            placeholder="请输入用户名"
-            :prefix-icon="User"
-          />
-        </el-form-item>
-        <el-form-item label="QQ号" prop="qqid">
-          <el-input 
-            v-model="registerForm.qqid" 
-            placeholder="请输入主要使用的QQ号"
-            :prefix-icon="User"
-          />
-        </el-form-item>
-        <el-form-item label="邮箱" prop="email">
-          <el-input 
-            v-model="registerForm.email" 
-            placeholder="请输入邮箱"
-            :prefix-icon="Message"
-          />
-        </el-form-item>
-        <el-form-item label="密码" prop="password">
-          <el-input 
-            v-model="registerForm.password" 
-            type="password" 
-            placeholder="请输入密码"
-            :prefix-icon="Lock"
+  <el-card class="register-card">
+    <template #header><h2>注册账号</h2></template>
+    <form @submit.prevent="submit">
+      <label
+        >用户名<el-input v-model="form.username" required autocomplete="username" maxlength="150"
+      /></label>
+      <el-checkbox v-model="bindMain">这是我的小号，绑定已有大号</el-checkbox>
+      <template v-if="bindMain">
+        <label
+          >选择大号<el-select
+            v-model="form.main_account_id"
+            filterable
+            remote
+            :remote-method="search"
+            :loading="searching"
+            placeholder="输入至少两个字符搜索用户名"
+            ><el-option
+              v-for="account in accounts"
+              :key="account.id"
+              :label="account.username"
+              :value="account.id" /></el-select
+        ></label>
+        <label
+          >验证大号密码<el-input
+            v-model="form.main_password"
+            required
+            type="password"
             show-password
-          />
-        </el-form-item>
-        <el-form-item label="确认密码" prop="confirmPassword">
-          <el-input 
-            v-model="registerForm.confirmPassword" 
-            type="password" 
-            placeholder="请再次输入密码"
-            :prefix-icon="Lock"
-            show-password
-          />
-        </el-form-item>
-        <el-form-item>
-          <el-button 
-            type="primary" 
-            :loading="loading" 
-            @click="handleRegister"
-            style="width: 100%"
-          >
-            注册
-          </el-button>
-        </el-form-item>
-        <el-form-item>
-          <div class="register-footer">
-            <span>已有账号？</span>
-            <el-link type="primary" @click="$router.push('/login')">
-              立即登录
-            </el-link>
-          </div>
-        </el-form-item>
-      </el-form>
-    </el-card>
-  </div>
+            autocomplete="off"
+        /></label>
+        <p>联系方式使用大号的资料。绑定后，大小号不能给彼此的作品评分。</p>
+      </template>
+      <template v-else>
+        <label>QQ 号<el-input v-model="form.qqid" required inputmode="numeric" /></label>
+        <label
+          >邮箱<el-input v-model="form.email" required type="email" autocomplete="email"
+        /></label>
+      </template>
+      <label
+        >新账号密码<el-input
+          v-model="form.password"
+          required
+          type="password"
+          show-password
+          autocomplete="new-password"
+      /></label>
+      <label
+        >确认新密码<el-input
+          v-model="form.password_confirm"
+          required
+          type="password"
+          show-password
+          autocomplete="new-password"
+      /></label>
+      <el-button native-type="submit" type="primary" :loading="busy">注册</el-button>
+      <router-link to="/login">已有账号，前往登录</router-link>
+    </form>
+  </el-card>
 </template>
-
 <script setup>
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { User, Lock, Message } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { register } from '../api'
-
-const router = useRouter()
-const registerFormRef = ref(null)
-const loading = ref(false)
-
-const registerForm = reactive({
+import { register, searchAccounts } from '../api'
+const router = useRouter(),
+  busy = ref(false),
+  bindMain = ref(false),
+  searching = ref(false),
+  accounts = ref([])
+const form = reactive({
   username: '',
   qqid: '',
   email: '',
   password: '',
-  confirmPassword: ''
+  password_confirm: '',
+  main_account_id: null,
+  main_password: '',
 })
-
-const validateConfirmPassword = (rule, value, callback) => {
-  if (value === '') {
-    callback(new Error('请再次输入密码'))
-  } else if (value !== registerForm.password) {
-    callback(new Error('两次输入密码不一致'))
-  } else {
-    callback()
+let searchVersion = 0
+const search = async (query) => {
+  const version = ++searchVersion
+  searching.value = true
+  try {
+    const result = await searchAccounts(query)
+    if (version === searchVersion) accounts.value = result
+  } catch (err) {
+    ElMessage.error(err.message)
+  } finally {
+    if (version === searchVersion) searching.value = false
   }
 }
-
-const rules = {
-  username: [
-    { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 3, max: 20, message: '用户名长度为 3-20 个字符', trigger: 'blur' }
-  ],
-  qqid: [
-    { required: true, message: '请输入主要QQ号', trigger: 'blur' },
-    { pattern: /^[1-9][0-9]{4,14}$/, message: 'QQ号格式不正确', trigger: 'blur' }
-  ],
-  email: [
-    { required: true, message: '请输入邮箱', trigger: 'blur' },
-    { type: 'email', message: '邮箱格式不正确', trigger: ['blur', 'change'] }
-  ],
-  password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 8, message: '密码长度不少于 8 个字符（后端校验）', trigger: 'blur' }
-  ],
-  confirmPassword: [
-    { required: true, validator: validateConfirmPassword, trigger: 'blur' }
-  ]
-}
-
-const handleRegister = async () => {
-  if (!registerFormRef.value) return
-  
-  await registerFormRef.value.validate(async (valid) => {
-    if (valid) {
-      loading.value = true
-      try {
-        await register(
-          registerForm.username,
-          registerForm.qqid,
-          registerForm.email,
-          registerForm.password,
-          registerForm.confirmPassword
-        )
-        
-        ElMessage.success('注册成功，请登录')
-        router.push('/login')
-      } catch (error) {
-        ElMessage.error(error.message || '注册失败，请稍后重试')
-      } finally {
-        loading.value = false
-      }
+const submit = async () => {
+  if (form.password !== form.password_confirm) {
+    ElMessage.error('两次密码不一致')
+    return
+  }
+  if (bindMain.value && !form.main_account_id) {
+    ElMessage.error('请选择大号')
+    return
+  }
+  busy.value = true
+  try {
+    const data = {
+      username: form.username,
+      password: form.password,
+      password_confirm: form.password_confirm,
     }
-  })
+    Object.assign(
+      data,
+      bindMain.value
+        ? { main_account_id: form.main_account_id, main_password: form.main_password }
+        : { email: form.email, qqid: form.qqid },
+    )
+    await register(data)
+    form.main_password = ''
+    ElMessage.success('注册成功，请登录')
+    router.push('/login')
+  } catch (err) {
+    ElMessage.error(err.message)
+  } finally {
+    busy.value = false
+  }
 }
 </script>
-
 <style scoped>
-.register-page {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: calc(100vh - 200px);
-  padding: 20px;
-}
-
 .register-card {
-  width: 100%;
-  max-width: 400px;
+  max-width: 520px;
+  margin: auto;
 }
-
-.card-header h2 {
+form {
+  display: grid;
+  gap: 18px;
+}
+label {
+  display: grid;
+  gap: 8px;
+}
+p {
   margin: 0;
-  text-align: center;
-  color: #303133;
-}
-
-.register-footer {
-  width: 100%;
-  text-align: center;
+  color: var(--text-secondary);
   font-size: 14px;
-  color: #909399;
-}
-
-.register-footer span {
-  margin-right: 5px;
 }
 </style>
