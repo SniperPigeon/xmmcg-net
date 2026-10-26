@@ -61,3 +61,7 @@ npm run format:check
 - `xmmcg/storage.py`：R2 与桶 CORS 配置。
 
 当前主线没有竞价、代币、两阶段创作或旧 API 兼容层。旧实现保存在 [`legacy`](https://github.com/SniperPigeon/xmmcg-net/tree/legacy) 分支。升级使用一次性数据迁移，参阅 [迁移说明](doc/MIGRATION.md)；不能直接使用历史仓库附带的开发数据库替代生产备份。
+
+## 自动部署
+
+push/PR 自动检查；main push 全部检查通过后，SSH 触发服务器按已验证 SHA 增量部署。首次安装使用 `deploy.sh`，日常更新使用 `update.sh`。Secrets 配置、服务器首次切换注意事项及两种脚本说明见 [CI/CD 与部署](doc/CI_CD.md)。

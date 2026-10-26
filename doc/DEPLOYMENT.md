@@ -4,7 +4,7 @@
 
 优先使用进程环境变量。项目根 `.env` 可用于本地或单机部署。保留原有文件选择顺序：存在 `login_credentials.env` 时读取它，否则读取 `.env`。两份文件不自动合并，进程环境变量始终优先。示例见根目录 `.env.example`，不要将真实凭证提交到 Git。
 
-后端 Python 3.12+，建议使用 3.13；前端构建需要 Node.js 22.12+。通过 `requirements.lock` 与 `package-lock.json` 固定已验证版本。
+后端 Python 3.12+，建议使用 3.13；前端构建支持 Node.js 22.12+。通过 `requirements.lock` 与 `package-lock.json` 固定已验证版本。
 
 ## R2
 
@@ -56,3 +56,5 @@ Net 登录/上传地址、账号和哈希密码通过 `MAJDATA_*` 配置。投�
 联调必须在数据库副本上进行，并设置 `ENABLE_CHART_FORWARD_TO_MAJDATA=False`。R2 测试对象使用独立随机前缀，验证后清理；不要通过重试历史谱面验证 Net。本次联调还在代码层拦截了 Net 上传函数及所有非 R2 网络地址。
 
 默认上传限制保留原值：音频 10 MB、封面 2 MB、视频 20 MB、谱面文本 1 MB，每位用户最多上传 3 首歌曲。环境变量可以覆盖这些值；谱面本身不再受指定歌曲或分阶段创作限制。
+
+从零部署与增量更新分别使用 `deploy.sh`、`update.sh`；main push 通过检查后的 SSH 自动部署、服务器原有配置的处理方式详见 [CI/CD 文档](CI_CD.md)。
