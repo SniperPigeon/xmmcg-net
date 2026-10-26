@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.conf import settings
 from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import ValidationError
@@ -9,7 +10,7 @@ from .draws import join_draw, run_draw, selection_phase
 from .models import CompetitionPhase, Song, SongDraw
 from .phases import require_capability
 from .serializers import SongSerializer, SongUploadSerializer
-from .uploads import discard_new_assets
+from .uploads import discard_new_assets, store_new_assets
 
 
 @api_view(["GET", "POST"])
@@ -28,21 +29,33 @@ def songs_root(request):
         )
     serializer = SongUploadSerializer(data=request.data, context={"request": request})
     serializer.is_valid(raise_exception=True)
-    song = None
+    phase = selection_phase()
+    if Song.objects.filter(user=request.user).count() >= settings.MAX_SONGS_PER_USER:
+        raise ValidationError(
+            f"已达到每个用户最多 {settings.MAX_SONGS_PER_USER} 首歌曲的限制"
+        )
+    song = Song(user=request.user, phase=phase, **serializer.validated_data)
     try:
+        store_new_assets(song)
         with transaction.atomic():
-            phase = CompetitionPhase.objects.select_for_update().get(
-                pk=selection_phase().pk
-            )
+            phase = CompetitionPhase.objects.select_for_update().get(pk=phase.pk)
+            if not phase.is_active or phase.status != "active":
+                raise ValidationError("歌曲上传阶段已结束或停用")
             if SongDraw.objects.filter(
                 phase=phase, completed_at__isnull=False
             ).exists():
                 raise ValidationError("抽选已完成，不能继续上传歌曲")
+            if (
+                Song.objects.filter(user=request.user).count()
+                >= settings.MAX_SONGS_PER_USER
+            ):
+                raise ValidationError(
+                    f"已达到每个用户最多 {settings.MAX_SONGS_PER_USER} 首歌曲的限制"
+                )
             join_draw(request.user)
-            song = serializer.save(user=request.user, phase=phase)
+            song.save()
     except Exception:
-        if song is not None:
-            discard_new_assets(song)
+        discard_new_assets(song)
         raise
     return Response(SongSerializer(song, context={"request": request}).data, status=201)
 

@@ -7,5 +7,3 @@ Pillow>=11,<13
 requests>=2.32,<3
 openpyxl==3.1.5
 django-storages[s3]==1.14.6
-dj-database-url>=2.3,<4
-psycopg[binary]>=3.2,<4

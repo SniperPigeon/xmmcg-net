@@ -15,7 +15,7 @@ from .majdata_service import sync_chart
 from .models import Chart
 from .phases import require_capability
 from .serializers import ChartSerializer, ChartUploadSerializer
-from .uploads import discard_new_assets
+from .uploads import discard_new_assets, store_new_assets
 
 
 def chart_list(queryset, request):
@@ -65,6 +65,7 @@ def charts_root(request):
         user=request.user, submitted_at=timezone.now(), **serializer.validated_data
     )
     try:
+        store_new_assets(chart)
         with transaction.atomic():
             chart.save()
             chart.contributors.add(request.user)

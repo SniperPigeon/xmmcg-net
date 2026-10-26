@@ -5,7 +5,6 @@ from pathlib import PurePosixPath
 from django.conf import settings
 from rest_framework import serializers
 from .models import Announcement, Banner, Chart, CompetitionPhase, Song
-from .uploads import discard_new_assets
 
 
 def validate_asset(value, extensions, limit, label):
@@ -20,7 +19,7 @@ class AssetValidationMixin:
     def validate_audio_file(self, value):
         return validate_asset(
             value,
-            {".mp3", ".ogg", ".wav", ".flac", ".m4a", ".aac"},
+            {".mp3", ".ogg", ".wav", ".flac", ".m4a", ".aac", ".wma"},
             settings.MAX_AUDIO_SIZE_MB,
             "音频",
         )
@@ -28,7 +27,7 @@ class AssetValidationMixin:
     def validate_cover_image(self, value):
         return validate_asset(
             value,
-            {".jpg", ".jpeg", ".png", ".webp"},
+            {".jpg", ".jpeg", ".png", ".gif", ".webp"},
             settings.MAX_COVER_SIZE_MB,
             "封面",
         )
@@ -124,21 +123,17 @@ class SongUploadSerializer(AssetValidationMixin, serializers.ModelSerializer):
             "netease_url",
         )
 
-    def create(self, validated_data):
+    def validate(self, validated_data):
         audio = validated_data["audio_file"]
         digest = hashlib.sha256()
         for chunk in audio.chunks():
             digest.update(chunk)
         audio.seek(0)
-        song = Song(
-            **validated_data, audio_hash=digest.hexdigest(), file_size=audio.size
-        )
-        try:
-            song.save()
-        except Exception:
-            discard_new_assets(song)
-            raise
-        return song
+        return {
+            **validated_data,
+            "audio_hash": digest.hexdigest(),
+            "file_size": audio.size,
+        }
 
 
 class SongSerializer(serializers.ModelSerializer):

@@ -11,15 +11,16 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
-import dj_database_url
 from xmmcg.storage import r2_storage_options
 from decouple import config, Csv, Config, RepositoryEnv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Environment variables override the repository-root .env file.
-env_path = BASE_DIR.parent.parent / ".env"
+# 保留原有配置优先级：进程环境变量 > login_credentials.env > .env。
+env_path = BASE_DIR.parent.parent / "login_credentials.env"
+if not env_path.exists():
+    env_path = BASE_DIR.parent.parent / ".env"
 if env_path.exists():
     config = Config(RepositoryEnv(str(env_path)))
 
@@ -112,14 +113,11 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": config("SQLITE_PATH", default=str(BASE_DIR / "db.sqlite3")),
+        # SQLite 不提供行级 SELECT FOR UPDATE；短写事务从开始时取得写锁。
+        "OPTIONS": {"timeout": 30, "transaction_mode": "IMMEDIATE"},
     }
 }
 
-
-if config("DATABASE_URL", default=""):
-    DATABASES["default"] = dj_database_url.parse(
-        config("DATABASE_URL"), conn_max_age=60, conn_health_checks=True
-    )
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
@@ -154,7 +152,7 @@ USE_I18N = True
 USE_TZ = True  # 启用时区支持，内部使用 UTC，显示时转换为 TIME_ZONE
 
 
-# All uploaded assets and collected Django static files live in R2.
+# 上传资源及收集后的 Django 静态文件存储在 R2。
 STORAGES = {
     "default": {
         "BACKEND": "xmmcg.storage.R2Storage",
@@ -166,17 +164,27 @@ STORAGES = {
     },
 }
 STATIC_URL = "/static/"
-# These limits concern request buffering only, never persistent asset storage.
+# 请求体缓冲仅使用临时空间，不用于持久保存上传资源。
 FILE_UPLOAD_MAX_MEMORY_SIZE = 8 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024
-MAX_AUDIO_SIZE_MB = config("MAX_AUDIO_SIZE_MB", default=50, cast=int)
-MAX_COVER_SIZE_MB = config("MAX_COVER_SIZE_MB", default=10, cast=int)
-MAX_VIDEO_SIZE_MB = config("MAX_VIDEO_SIZE_MB", default=200, cast=int)
-MAX_CHART_SIZE_MB = config("MAX_CHART_SIZE_MB", default=5, cast=int)
+MAX_AUDIO_SIZE_MB = config("MAX_AUDIO_SIZE_MB", default=10, cast=int)
+MAX_COVER_SIZE_MB = config("MAX_COVER_SIZE_MB", default=2, cast=int)
+MAX_VIDEO_SIZE_MB = config("MAX_VIDEO_SIZE_MB", default=20, cast=int)
+MAX_CHART_SIZE_MB = config("MAX_CHART_SIZE_MB", default=1, cast=int)
+MAX_SONGS_PER_USER = config("MAX_SONGS_PER_USER", default=3, cast=int)
 
+PRODUCTION_DOMAIN = config("PRODUCTION_DOMAIN", default="xmmcg.majdata.net")
+_default_origins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
+]
+if PRODUCTION_DOMAIN:
+    _default_origins += [f"https://{PRODUCTION_DOMAIN}", f"http://{PRODUCTION_DOMAIN}"]
 CORS_ALLOWED_ORIGINS = config(
     "FRONTEND_ORIGINS",
-    default="http://localhost:5173,http://127.0.0.1:5173",
+    default=",".join(_default_origins),
     cast=Csv(),
 )
 CORS_ALLOW_CREDENTIALS = True
@@ -188,8 +196,8 @@ CSRF_TRUSTED_ORIGINS = config(
 CSRF_COOKIE_HTTPONLY = False
 SESSION_COOKIE_SAMESITE = config("SESSION_COOKIE_SAMESITE", default="Lax")
 CSRF_COOKIE_SAMESITE = config("CSRF_COOKIE_SAMESITE", default="Lax")
-SESSION_COOKIE_SECURE = config("SESSION_COOKIE_SECURE", default=not DEBUG, cast=bool)
-CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=not DEBUG, cast=bool)
+SESSION_COOKIE_SECURE = config("SESSION_COOKIE_SECURE", default=False, cast=bool)
+CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=False, cast=bool)
 R2_CORS_ORIGINS = config(
     "R2_CORS_ORIGINS", default=",".join(CORS_ALLOWED_ORIGINS), cast=Csv()
 )
@@ -201,9 +209,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_THROTTLE_RATES": {
-        "registration": "20/hour",
         "account_search": "60/min",
-        "login": "30/min",
     },
 }
 ENABLE_CHART_FORWARD_TO_MAJDATA = config(
