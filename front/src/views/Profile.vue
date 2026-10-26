@@ -19,9 +19,6 @@
     </form>
     <el-button type="primary" @click="$router.push('/charts')">前往投稿</el-button>
     <el-button @click="$router.push('/eval')">查看评分任务</el-button>
-    <p v-if="currentUser.is_staff">
-      <a :href="adminUrl" target="_blank" rel="noopener">管理后台：阶段、公告、抽选和评分分配</a>
-    </p>
   </el-card>
 </template>
 <script setup>
@@ -29,8 +26,6 @@ import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { currentUser, loadSession } from '../state/session'
 import { updateUserProfile } from '../api'
-const adminUrl =
-  new URL(import.meta.env.VITE_API_BASE_URL || '/api', window.location.origin).origin + '/admin/'
 const name = ref(''),
   busy = ref(false)
 onMounted(async () => {

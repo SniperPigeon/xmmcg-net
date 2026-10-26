@@ -49,8 +49,8 @@
         <h3>{{ chart.title }}</h3>
         <p>{{ chart.designer }}</p>
         <audio v-if="chart.audio_url" controls preload="none" :src="chart.audio_url" />
-        <p>
-          <el-tag>{{ syncLabels[chart.net_sync_status] || chart.net_sync_status }}</el-tag>
+        <p v-if="syncLabels[chart.net_sync_status]">
+          <el-tag>{{ syncLabels[chart.net_sync_status] }}</el-tag>
         </p>
         <el-button @click="download(chart.id)" :loading="downloading === chart.id"
           >下载谱面包</el-button
@@ -61,7 +61,6 @@
           :loading="retrying === chart.id"
           >重试 Net 同步</el-button
         >
-        <p v-if="chart.net_sync_status === 'unknown'">同步结果需管理员核对，投稿已保留。</p>
         <a v-if="chart.net_url" :href="chart.net_url" target="_blank" rel="noopener noreferrer"
           >在 Net 查看</a
         >
@@ -108,7 +107,6 @@ const syncLabels = {
   syncing: '正在同步 Net',
   synced: '已同步 Net',
   failed: 'Net 同步失败',
-  unknown: '需核对 Net 结果',
   disabled: 'Net 同步未启用',
 }
 const setFile = (name, event) => {
@@ -140,8 +138,8 @@ const upload = async (event) => {
     data.append('title', title.value)
     data.append('designer', designer.value)
     data.append('submission_key', submissionKey)
-    const result = await submitChart(data)
-    ElMessage.success(`投稿已保存：${syncLabels[result.chart.net_sync_status]}`)
+    await submitChart(data)
+    ElMessage.success('投稿已保存')
     event.target.reset()
     Object.keys(files).forEach((key) => delete files[key])
     title.value = ''
