@@ -86,6 +86,9 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+# 仅接受受信任 Nginx 覆写的协议头；Gunicorn 保持只监听 Unix socket。
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 ROOT_URLCONF = "xmmcg.urls"
 
 TEMPLATES = [
