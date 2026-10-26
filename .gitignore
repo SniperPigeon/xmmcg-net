@@ -33,3 +33,18 @@ dist-ssr
 .mp3
 backend/xmmcg/media
 
+.env
+.env.*
+!.env.example
+login_credentials.env
+.venv/
+venv/
+*.sqlite3
+*.sqlite3-*
+.pytest_cache/
+.ruff_cache/
+
+# 本地复核报告不参与应用发布；部署和迁移说明继续跟踪。
+/doc/REFACTOR_AUDIT.md
+/reports/
+

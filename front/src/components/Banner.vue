@@ -1,12 +1,17 @@
 <template>
   <el-carousel :interval="5000" height="300px" class="banner-carousel">
     <el-carousel-item v-for="(item, index) in banners" :key="index">
-      <div class="banner-item" :style="{backgroundColor: item.color,
-    backgroundImage: item.image_url 
-    ? `linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url(${item.image_url})` 
-    : 'none',
-    backgroundSize: 'cover', 
-    backgroundPosition: 'center' }">
+      <div
+        class="banner-item"
+        :style="{
+          backgroundColor: item.color,
+          backgroundImage: item.image_url
+            ? `linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url(${item.image_url})`
+            : 'none',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }"
+      >
         <div class="banner-content">
           <h2>{{ item.title }}</h2>
           <p>{{ item.content }}</p>
@@ -34,7 +39,7 @@ const handleClick = (link) => {
     if (link.startsWith('/')) {
       router.push(link)
     } else {
-      window.open(link, '_blank')
+      if (/^https?:\/\//i.test(link)) window.open(link, '_blank', 'noopener,noreferrer')
     }
   }
 }
@@ -91,7 +96,7 @@ onMounted(() => {
   .banner-content h2 {
     font-size: 24px;
   }
-  
+
   .banner-content p {
     font-size: 14px;
   }

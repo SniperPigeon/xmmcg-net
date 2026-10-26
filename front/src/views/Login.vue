@@ -6,45 +6,34 @@
           <h2>用户登录</h2>
         </div>
       </template>
-      <el-form 
-        ref="loginFormRef" 
-        :model="loginForm" 
-        :rules="rules" 
+      <el-form
+        ref="loginFormRef"
+        :model="loginForm"
+        :rules="rules"
         label-width="80px"
         @submit.prevent="handleLogin"
       >
         <el-form-item label="用户名" prop="username">
-          <el-input 
-            v-model="loginForm.username" 
-            placeholder="请输入用户名"
-            :prefix-icon="User"
-          />
+          <el-input v-model="loginForm.username" placeholder="请输入用户名" :prefix-icon="User" />
         </el-form-item>
         <el-form-item label="密码" prop="password">
-          <el-input 
-            v-model="loginForm.password" 
-            type="password" 
+          <el-input
+            v-model="loginForm.password"
+            type="password"
             placeholder="请输入密码"
             :prefix-icon="Lock"
             show-password
           />
         </el-form-item>
         <el-form-item>
-          <el-button 
-            type="primary" 
-            :loading="loading" 
-            @click="handleLogin"
-            style="width: 100%"
-          >
+          <el-button type="primary" :loading="loading" @click="handleLogin" style="width: 100%">
             登录
           </el-button>
         </el-form-item>
         <el-form-item>
           <div class="login-footer">
             <span>还没有账号？</span>
-            <el-link type="primary" @click="$router.push('/register')">
-              立即注册
-            </el-link>
+            <el-link type="primary" @click="$router.push('/register')"> 立即注册 </el-link>
           </div>
         </el-form-item>
       </el-form>
@@ -58,6 +47,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { User, Lock } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { login } from '../api'
+import { loadSession } from '../state/session'
 
 const router = useRouter()
 const route = useRoute()
@@ -66,51 +56,37 @@ const loading = ref(false)
 
 const loginForm = reactive({
   username: '',
-  password: ''
+  password: '',
 })
 
 const rules = {
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 3, max: 20, message: '用户名长度为 3-20 个字符', trigger: 'blur' }
+    { min: 3, max: 20, message: '用户名长度为 3-20 个字符', trigger: 'blur' },
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码长度不少于 6 个字符', trigger: 'blur' }
-  ]
+    { min: 6, message: '密码长度不少于 6 个字符', trigger: 'blur' },
+  ],
 }
 
 const handleLogin = async () => {
   if (!loginFormRef.value) return
-  
+
   await loginFormRef.value.validate(async (valid) => {
     if (valid) {
       loading.value = true
       try {
-        const data = await login(loginForm.username, loginForm.password)
-
-        // 调试：打印后端返回
-        console.log('Login API response:', data)
-
-        // 后端返回 {user: {...}}，无 token；用 session cookie 维持登录
-        // 为了前端路由守卫简单，写入一个占位 token
-        localStorage.setItem('token', 'session')
-        localStorage.setItem('username', data.user?.username || loginForm.username)
-        
+        await login(loginForm.username, loginForm.password)
+        await loadSession(true)
         ElMessage.success('登录成功')
-        //修改让重定向可以刷新页面。
-        const redirectPath = route.query.redirect || '/profile'
-
-        // 2. 为了兼容 Hash模式 (#/profile) 和 History模式 (/profile)
-        // 使用 router.resolve 生成完整的 href (例如: http://localhost/#/profile)
-        const { href } = router.resolve({ path: redirectPath })
-
-        // 3. 使用原生 window.location 进行跳转，这会触发浏览器刷新
-        window.location.href = href
-        
-        // // 跳转到之前的页面或个人中心
-        // const redirect = route.query.redirect || '/profile'
-        // router.push(redirect)
+        const next =
+          typeof route.query.redirect === 'string' &&
+          route.query.redirect.startsWith('/') &&
+          !route.query.redirect.startsWith('//')
+            ? route.query.redirect
+            : '/profile'
+        router.push(next)
       } catch (error) {
         ElMessage.error(error.message || '登录失败，请检查用户名和密码')
       } finally {

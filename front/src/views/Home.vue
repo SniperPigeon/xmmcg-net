@@ -38,7 +38,9 @@
             </el-col>
             <el-col :xs="24" :sm="12" :md="6">
               <div class="status-item">
-                <div class="status-label">{{ competitionStatus.submissionsLabel || '提交作品数' }}</div>
+                <div class="status-label">
+                  {{ competitionStatus.submissionsLabel || '提交作品数' }}
+                </div>
                 <div class="status-value">{{ competitionStatus.submissions || 0 }}</div>
               </div>
             </el-col>
@@ -53,17 +55,15 @@
 
         <!-- 快速入口 -->
         <el-row :gutter="20" class="quick-actions">
-          <el-col :xs="24" :sm="12" :md="8">
+          <el-col v-if="competitionStatus.capabilities?.songs_enabled" :xs="24" :sm="12" :md="8">
             <el-card shadow="hover" class="action-card">
               <div class="action-content">
                 <el-icon size="48" color="#409EFF">
                   <Headset />
                 </el-icon>
-                <h3>浏览歌曲</h3>
-                <p>查看所有可竞标的歌曲</p>
-                <el-button type="primary" @click="$router.push('/songs')">
-                  前往歌曲页
-                </el-button>
+                <h3>歌曲抽选</h3>
+                <p>可选的歌曲上传与随机抽选</p>
+                <el-button type="primary" @click="$router.push('/songs')"> 前往歌曲页 </el-button>
               </div>
             </el-card>
           </el-col>
@@ -75,9 +75,7 @@
                 </el-icon>
                 <h3>查看谱面</h3>
                 <p>浏览所有提交的谱面作品</p>
-                <el-button type="success" @click="$router.push('/charts')">
-                  前往谱面页
-                </el-button>
+                <el-button type="success" @click="$router.push('/charts')"> 前往谱面页 </el-button>
               </div>
             </el-card>
           </el-col>
@@ -88,10 +86,8 @@
                   <User />
                 </el-icon>
                 <h3>个人中心</h3>
-                <p>管理您的作品和竞标</p>
-                <el-button type="warning" @click="goToProfile">
-                  前往个人中心
-                </el-button>
+                <p>管理您的账号与作品</p>
+                <el-button type="warning" @click="goToProfile"> 前往个人中心 </el-button>
               </div>
             </el-card>
           </el-col>
@@ -109,7 +105,7 @@ import Banner from '../components/Banner.vue'
 import Announcement from '../components/Announcement.vue'
 import PhaseTimeline from '../components/PhaseTimeline.vue'
 import { getCompetitionStatus } from '../api'
-import { ElMessage } from 'element-plus'
+import { currentUser } from '../state/session'
 
 const router = useRouter()
 
@@ -118,27 +114,19 @@ const competitionStatus = ref({
   status: '',
   statusText: '',
   participants: 0,
-  submissions: 0
+  submissions: 0,
 })
 
 const getStatusType = (status) => {
   const typeMap = {
-    'pending': 'info',
-    'active': 'success',
-    'completed': 'warning'
+    upcoming: 'info',
+    active: 'success',
+    ended: 'warning',
   }
   return typeMap[status] || 'info'
 }
 
-const goToProfile = () => {
-  const token = localStorage.getItem('token')
-  if (!token) {
-    ElMessage.warning('请先登录')
-    router.push('/login')
-  } else {
-    router.push('/profile')
-  }
-}
+const goToProfile = () => router.push(currentUser.value ? '/profile' : '/login')
 
 const fetchCompetitionStatus = async () => {
   try {

@@ -1,0 +1,102 @@
+name: 检查与部署
+on: [push, pull_request]
+permissions:
+  contents: read
+env:
+  ENABLE_CHART_FORWARD_TO_MAJDATA: 'False'
+
+jobs:
+  backend:
+    name: 后端单元测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: backend/xmmcg/requirements.lock
+      - run: pip install -r backend/xmmcg/requirements.lock ruff==0.15.14
+      - run: ruff check backend/xmmcg scripts
+      - run: python backend/xmmcg/manage.py makemigrations --check --dry-run --settings=xmmcg.test_settings
+      - run: python backend/xmmcg/manage.py test songs.tests --settings=xmmcg.test_settings --noinput
+
+  frontend:
+    name: 前端构建
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: front
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: front/package-lock.json
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run build
+
+  deployment_checks:
+    name: 部署脚本与 Nginx 检查
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: false
+      - run: sudo apt-get update && sudo apt-get install -y nginx shellcheck rsync
+      - run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      - run: '"$(go env GOPATH)/bin/actionlint"'
+      - run: shellcheck deploy.sh update.sh deploy_frontend.sh scripts/*.sh
+      - run: sudo python3 -m unittest discover -s scripts/tests -v
+      - name: 验证 Nginx 配置与路由
+        run: sudo python3 scripts/tests/check_nginx.py
+
+  deploy:
+    name: SSH 部署 main
+    needs: [backend, frontend, deployment_checks]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: SSH 触发服务器构建
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/xmmcg' }}
+        run: |
+          set -Eeuo pipefail
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS; do
+            [[ -n "${!name}" ]] || { echo "缺少 GitHub Secret：$name" >&2; exit 1; }
+          done
+          [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9:][a-zA-Z0-9.:-]*$ ]] || exit 1
+          [[ "$DEPLOY_USER" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$ ]] || exit 1
+          [[ "$DEPLOY_PORT" =~ ^[0-9]{1,5}$ ]] && ((10#$DEPLOY_PORT > 0 && 10#$DEPLOY_PORT <= 65535)) || exit 1
+          [[ "$DEPLOY_PATH" =~ ^/[a-zA-Z0-9_./-]+$ && "$DEPLOY_PATH" != / ]] || exit 1
+          ssh_dir="$(mktemp -d "$RUNNER_TEMP/xmmcg-ssh.XXXXXX")"
+          trap 'rm -f "$ssh_dir/key" "$ssh_dir/known_hosts"; rmdir "$ssh_dir"' EXIT
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$ssh_dir/key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
+          printf -v remote_command '/bin/bash -s -- %q %q' "$DEPLOY_PATH" "$GITHUB_SHA"
+          if [[ "$DEPLOY_USER" != root ]]; then remote_command="sudo -n $remote_command"; fi
+          ssh -T -p "$DEPLOY_PORT" -i "$ssh_dir/key" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$ssh_dir/known_hosts" \
+            -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
+            "$DEPLOY_USER@$DEPLOY_HOST" "$remote_command" < scripts/remote_deploy.sh

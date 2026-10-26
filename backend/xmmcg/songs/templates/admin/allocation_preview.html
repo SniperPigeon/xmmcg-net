@@ -1,0 +1,9 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% if preview.error %}<p>{{ preview.error }}</p>{% else %}
+<p>{{ preview.charts_count }} 张谱面，{{ preview.reviewers_count }} 位评分者，每谱目标 {{ preview.target }} 个评分。</p>
+<p>预计新增 {{ preview.new_tasks }} 个任务。已完成的评分和已有任务均会保留。相同任务量的随机排序可能在执行时变化。</p>
+{% for item in preview.shortfalls %}<p>{{ item.title }}：缺少 {{ item.missing }} 位评分者</p>{% endfor %}
+<form method="post">{% csrf_token %}<input type="submit" value="执行分配"></form>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends "admin/change_form.html" %}
+{% block object-tools-items %}
+{% if original %}
+<li><a href="{% url 'admin:songs_competitionphase_changelist' %}?competition__id__exact={{ original.pk }}">比赛阶段</a></li>
+<li><a href="{% url 'admin:songs_chart_changelist' %}?competition__id__exact={{ original.pk }}">本届谱面</a></li>
+<li><a href="{% url 'admin:competition_export' original.pk %}">导出本届成绩</a></li>
+{% if has_change_permission %}
+{% if original.status == 'draft' %}
+<li><a href="{% url 'admin:competition_activate' original.pk %}">启用比赛</a></li>
+{% elif original.status == 'active' %}
+<li><a href="{% url 'admin:competition_allocate' original.pk %}">预览 / 分配评分任务</a></li>
+<li><a href="{% url 'admin:competition_archive' original.pk %}">归档比赛</a></li>
+{% endif %}
+{% endif %}
+{% if original.status != 'archived' and perms.songs.add_competitionphase %}
+<li><a href="{% url 'admin:songs_competitionphase_add' %}?competition={{ original.pk }}">添加比赛阶段</a></li>
+{% endif %}
+{% endif %}
+{{ block.super }}
+{% endblock %}

@@ -6,8 +6,8 @@ export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src')
-    }
+      '@': resolve(__dirname, 'src'),
+    },
   },
   server: {
     port: 5173,
@@ -15,8 +15,8 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-        credentials: 'include'  // 确保 Cookie 在代理时被正确转发
-      }
-    }
-  }
+        credentials: 'include', // 确保 Cookie 在代理时被正确转发
+      },
+    },
+  },
 })
