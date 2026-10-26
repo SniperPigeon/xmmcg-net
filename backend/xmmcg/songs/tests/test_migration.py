@@ -114,6 +114,8 @@ for name in names:
     for row in after:
         if name in ('Chart', 'Song', 'CompetitionPhase'):
             assert row.pop('competition_id') == history.pk
+        if name == 'Chart':
+            assert row.pop('guid') == row['submission_key']
     assert before[name] == after, name
 assert list(get('Chart').objects.get().contributors.values_list('pk', flat=True)) == [u1.pk]
 print('edition migration verified')

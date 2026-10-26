@@ -1,5 +1,6 @@
 from urllib.parse import quote
 from django.core.files.base import ContentFile
+from django.core.files.utils import validate_file_name
 from django.core.files.storage import Storage
 
 
@@ -8,6 +9,9 @@ class ObjectStorage(Storage):
 
     def __init__(self):
         self.objects = {}
+
+    def get_valid_name(self, name):
+        return validate_file_name(name)
 
     def _save(self, name, content):
         self.objects[name] = b"".join(content.chunks())

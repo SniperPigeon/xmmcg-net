@@ -98,6 +98,7 @@ class ChartSerializer(serializers.ModelSerializer):
         model = Chart
         fields = (
             "id",
+            "guid",
             "title",
             "designer",
             "status",

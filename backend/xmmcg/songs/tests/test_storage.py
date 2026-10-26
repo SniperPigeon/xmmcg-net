@@ -51,8 +51,8 @@ class NetStreamTests(TestCase):
     def test_net_receives_exact_original_bytes_from_storage_stream(self):
         chart = make_chart(make_user("u"))
         original = b"\xef\xbb\xbf&title=original\r\n&inote_5=1,2,E\r\n"
-        chart.chart_file.save("maidata.txt", ContentFile(original))
-        chart.audio_file.save("track.ogg", ContentFile(b"audio"))
+        chart.chart_file.save("原始 谱面.txt", ContentFile(original))
+        chart.audio_file.save("原始 音乐.ogg", ContentFile(b"audio"))
         chart.cover_image.save("bg.png", ContentFile(b"cover"))
         login_response = MagicMock(status_code=200)
         login_response.json.return_value = {"code": 114514, "message": "ok"}
@@ -66,6 +66,7 @@ class NetStreamTests(TestCase):
             if "files" not in kwargs:
                 return login_response
             files = kwargs["files"]
+            self.assertEqual(files[0][1][0], "maidata.txt")
             self.assertEqual(files[0][1][1].read(), original)
             self.assertEqual(files[2][1][0], "track.mp3")
             return upload_response

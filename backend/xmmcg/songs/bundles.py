@@ -15,7 +15,7 @@ class BundleError(APIException):
     default_detail = "谱面资源暂时无法读取，请稍后重试"
 
 
-def write_chart(archive, chart, prefix=""):
+def write_chart(archive, chart, prefix="", *, original_names=False):
     written = 0
     for name, stem, label in (
         ("chart_file", "maidata", "谱面文件"),
@@ -29,12 +29,11 @@ def write_chart(archive, chart, prefix=""):
         filename = PurePosixPath(field.name)
         if name == "background_video" and filename.name.lower().startswith("pv"):
             stem = "pv"
+        archive_name = filename.name if original_names else stem + filename.suffix
         try:
             with (
                 field.open("rb") as source,
-                archive.open(
-                    prefix + stem + filename.suffix, "w", force_zip64=True
-                ) as target,
+                archive.open(prefix + archive_name, "w", force_zip64=True) as target,
             ):
                 copyfileobj(source, target, length=1024 * 1024)
         except (OSError, BotoCoreError, ClientError) as error:
@@ -52,8 +51,13 @@ def chart_bundle_response(charts, *, filename, batch=False):
         with ZipFile(output, "w", ZIP_DEFLATED) as archive:
             manifest = []
             for chart in charts:
-                folder = f"chart-{chart.pk}"
-                write_chart(archive, chart, prefix=folder + "/" if batch else "")
+                folder = str(chart.guid)
+                write_chart(
+                    archive,
+                    chart,
+                    prefix=folder + "/" if batch else "",
+                    original_names=batch,
+                )
                 if batch:
                     manifest.append(f"{folder}：{chart.title} — {chart.designer}")
             if batch:

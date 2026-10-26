@@ -290,6 +290,7 @@ class ChartAdmin(admin.ModelAdmin):
     list_filter = ("competition", "status", "net_sync_status")
     search_fields = ("title", "designer", "user__username")
     readonly_fields = (
+        "guid",
         "competition",
         "user",
         "contributors",

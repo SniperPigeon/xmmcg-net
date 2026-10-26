@@ -76,13 +76,18 @@ class BundleTests(TestCase):
                 expected = {"谱面列表.txt"}
                 for chart, files in ((first, first_files), (second, second_files)):
                     for filename, content in files.items():
-                        name = f"chart-{chart.pk}/{filename}"
+                        original_name = {
+                            "maidata.txt": "original.txt",
+                            "track.mp3": "any.mp3",
+                            "bg.png": "cover.png",
+                        }.get(filename, filename)
+                        name = f"{chart.guid}/{original_name}"
                         expected.add(name)
                         self.assertEqual(bundle.read(name), content)
                 self.assertEqual(set(bundle.namelist()), expected)
                 manifest = bundle.read("谱面列表.txt").decode("utf-8")
                 self.assertIn(first.title, manifest)
-                self.assertNotIn(f"chart-{excluded.pk}：", manifest)
+                self.assertNotIn(f"{excluded.guid}：", manifest)
             response.close()
         self.net_upload.assert_not_called()
         first.refresh_from_db()

@@ -28,19 +28,19 @@ def get_video_filename(instance, filename):
 
 
 def get_chart_filename(instance, filename):
-    return asset_key(instance, "maidata.txt", "charts/data")
+    return f"charts/{instance.guid}/{PurePosixPath(filename).name}"
 
 
 def get_chart_audio_filename(instance, filename):
-    return asset_key(instance, filename, "charts/audio")
+    return get_chart_filename(instance, filename)
 
 
 def get_chart_cover_filename(instance, filename):
-    return asset_key(instance, filename, "charts/covers")
+    return get_chart_filename(instance, filename)
 
 
 def get_chart_video_filename(instance, filename):
-    return asset_key(instance, filename, "charts/video")
+    return get_chart_filename(instance, filename)
 
 
 def get_default_page_access():
@@ -327,6 +327,11 @@ class Song(models.Model):
 class Chart(models.Model):
     """用户提交的完整谱面。"""
 
+    # 服务端生成，和客户端重试标识分开，避免并发重试共用目录及误删文件。
+    guid = models.UUIDField(
+        default=uuid.uuid4, unique=True, editable=False, verbose_name="谱面 GUID"
+    )
+
     STATUS_CHOICES = [("submitted", "已投稿"), ("archived", "历史归档")]
     SYNC_CHOICES = [
         ("pending", "待同步"),
@@ -377,6 +382,7 @@ class Chart(models.Model):
     )
     audio_file = models.FileField(
         upload_to=get_chart_audio_filename,
+        max_length=512,
         null=True,
         blank=True,
         verbose_name="音频文件",
@@ -384,6 +390,7 @@ class Chart(models.Model):
     )
     cover_image = models.ImageField(
         upload_to=get_chart_cover_filename,
+        max_length=512,
         null=True,
         blank=True,
         verbose_name="封面图片",
@@ -391,6 +398,7 @@ class Chart(models.Model):
     )
     background_video = models.FileField(
         upload_to=get_chart_video_filename,
+        max_length=512,
         null=True,
         blank=True,
         verbose_name="背景视频",
@@ -398,6 +406,7 @@ class Chart(models.Model):
     )
     chart_file = models.FileField(
         upload_to=get_chart_filename,
+        max_length=512,
         null=True,
         blank=True,
         verbose_name="谱面文件",

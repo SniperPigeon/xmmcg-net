@@ -205,7 +205,7 @@ class UploadFailureTests(TestCase):
         original_save = storage._save
 
         def fail_cover(name, content):
-            if "/covers/" in name:
+            if name.endswith("/cover.png"):
                 raise OSError("simulated storage failure")
             return original_save(name, content)
 

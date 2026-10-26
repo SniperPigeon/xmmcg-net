@@ -36,7 +36,7 @@ cp .env.example .env
 
 配置 `R2_ACCOUNT_ID`（或 `R2_ENDPOINT_URL`）、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET_NAME` 即可。凭证只存在后端环境中。
 
-默认私有桶，API 返回临时签名读取地址；可通过 `R2_PUBLIC_DOMAIN` 使用公开自定义域名。上传由认证后端转存 R2，浏览器不持有写凭证。资源位于桶内 `media/`，Django 静态文件位于 `static/`；前端构建产物仍由原有 Nginx 目录提供。
+默认私有桶，API 返回临时签名读取地址；可通过 `R2_PUBLIC_DOMAIN` 使用公开自定义域名。上传由认证后端转存 R2，浏览器不持有写凭证。新谱面素材按 `media/charts/<谱面 GUID>/<原文件名>` 集中保存，Django 静态文件位于 `static/`；前端构建产物仍由原有 Nginx 目录提供。
 
 R2 CORS 和 API CORS 分别配置，详见 [部署与 R2 配置](doc/DEPLOYMENT.md)。生产和开发均使用 SQLite，默认文件为 `backend/xmmcg/db.sqlite3`，可用 `SQLITE_PATH` 指定路径。保留现有 Nginx + Gunicorn 部署和 SQLite 备份方式。HTTP 上传缓冲可能使用临时空间，不存放持久资产。
 

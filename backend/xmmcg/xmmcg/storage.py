@@ -4,6 +4,7 @@ from urllib.parse import quote, urlparse
 
 from botocore.config import Config
 from django.core.exceptions import ImproperlyConfigured
+from django.core.files.utils import validate_file_name
 from django.conf import settings
 from storages.backends.s3 import S3Storage
 
@@ -37,6 +38,10 @@ def r2_storage_options(config, prefix):
 
 
 class R2Storage(S3Storage):
+    def get_valid_name(self, name):
+        # R2 支持中文、空格和标点；保留原名，仍拒绝目录穿越及非法路径。
+        return validate_file_name(name)
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if not self.access_key or not self.secret_key or not self.bucket_name:
