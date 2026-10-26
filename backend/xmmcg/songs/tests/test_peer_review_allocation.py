@@ -74,6 +74,73 @@ class ReviewTests(TestCase):
             self.charts[0].review_allocations.filter(reviewer=self.users[1]).exists()
         )
 
+    def test_main_and_all_sibling_aliases_excluded_from_tasks_and_extra_reviews(self):
+        main = self.users[0]
+        aliases = [make_user(f"sibling{i}", main) for i in range(3)]
+        family = [main, *aliases]
+        family_charts = [self.charts[0], *[make_chart(alias) for alias in aliases]]
+        # 同组账号作为共同作者的作品也必须排除。
+        self.charts[1].contributors.add(aliases[0])
+        family_charts.append(self.charts[1])
+        own_ids = {chart.pk for chart in family_charts}
+        eligible_ids = {self.charts[2].pk, self.charts[3].pk}
+        client = APIClient()
+        for user in family:
+            with self.subTest(username=user.username):
+                client.force_authenticate(user)
+                available = client.get("/api/reviews/available/")
+                self.assertEqual(available.status_code, 200)
+                self.assertEqual({row["id"] for row in available.data}, eligible_ids)
+                for chart in family_charts:
+                    response = client.post(
+                        "/api/reviews/submit/",
+                        {"reviews": [{"chart_id": chart.pk, "score": 40}]},
+                        format="json",
+                    )
+                    self.assertEqual(response.status_code, 400, response.data)
+        self.assertFalse(PeerReview.objects.exists())
+        allocate_reviews(commit=True)
+        self.assertFalse(
+            PeerReviewAllocation.objects.filter(reviewer__in=aliases).exists()
+        )
+        self.assertFalse(
+            PeerReviewAllocation.objects.filter(
+                reviewer=main, chart_id__in=own_ids
+            ).exists()
+        )
+        for user in family:
+            client.force_authenticate(user)
+            response = client.get("/api/reviews/tasks/")
+            self.assertEqual(
+                {row["chart_id"] for row in response.data["tasks"]}, eligible_ids
+            )
+
+    def test_sibling_aliases_share_scores_and_favorite_quota(self):
+        aliases = [make_user(f"linked{i}", self.users[0]) for i in range(3)]
+        self.config.max_favorites = 1
+        self.config.save()
+        submit_reviews(
+            aliases[0],
+            [{"chart_id": self.charts[1].pk, "score": 40, "favorite": True}],
+        )
+        for user in [self.users[0], *aliases[1:]]:
+            with self.subTest(username=user.username):
+                with self.assertRaises(ValidationError):
+                    submit_reviews(user, [{"chart_id": self.charts[1].pk, "score": 30}])
+                with self.assertRaises(ValidationError):
+                    submit_reviews(
+                        user,
+                        [
+                            {
+                                "chart_id": self.charts[2].pk,
+                                "score": 30,
+                                "favorite": True,
+                            }
+                        ],
+                    )
+        review = PeerReview.objects.get()
+        self.assertEqual(review.reviewer_id, self.users[0].pk)
+
     def test_decimal_and_comment_persist_and_survive_reallocation(self):
         allocate_reviews(commit=True)
         submit_reviews(

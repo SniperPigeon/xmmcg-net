@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
-from users.models import UserProfile
+from users.models import UserProfile, identity_id
 from .test_peer_review_allocation import make_user
 
 
@@ -52,6 +52,23 @@ class AccountTests(TestCase):
             400,
         )
         self.assertFalse(get_user_model().objects.filter(username="alternate").exists())
+
+    def test_multiple_aliases_can_register_under_the_same_main_account(self):
+        for index in range(5):
+            with self.subTest(alias=index):
+                response = self.client.post(
+                    "/api/users/register/",
+                    {**self.payload, "username": f"alternate{index}"},
+                    format="json",
+                )
+                self.assertEqual(response.status_code, 201, response.data)
+                self.assertEqual(response.data["user"]["email"], self.main.email)
+                self.assertEqual(response.data["user"]["qqid"], "1234567")
+        profiles = self.main.alternate_profiles.select_related("user__profile")
+        self.assertEqual(profiles.count(), 5)
+        for profile in profiles:
+            profile.full_clean()
+            self.assertEqual(identity_id(profile.user), self.main.pk)
 
     def test_account_lookup_does_not_expose_contacts_or_linkage(self):
         make_user("mainalias", self.main)
