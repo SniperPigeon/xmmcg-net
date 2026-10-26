@@ -1,37 +1,15 @@
-# Systemd service file for Gunicorn
-# Deploy to: /etc/systemd/system/gunicorn.service
-
 [Unit]
-Description=Gunicorn daemon for XMMCG Django application
+Description=XMMCG API
 After=network.target
 
 [Service]
-Type=notify
 User=www-data
 Group=www-data
 WorkingDirectory=/opt/xmmcg/backend/xmmcg
-Environment="PATH=/opt/xmmcg/venv/bin"
 EnvironmentFile=/opt/xmmcg/.env
-
-ExecStart=/opt/xmmcg/venv/bin/gunicorn \
-    --workers 4 \
-    --threads 2 \
-    --timeout 120 \
-    --bind unix:/var/run/gunicorn/xmmcg.sock \
-    --access-logfile /var/log/gunicorn/access.log \
-    --error-logfile /var/log/gunicorn/error.log \
-    --log-level info \
-    --name xmmcg \
-    xmmcg.wsgi:application
-
-ExecReload=/bin/kill -s HUP $MAINPID
-KillMode=mixed
-TimeoutStopSec=5
-PrivateTmp=true
-
-# Restart policy
-Restart=always
-RestartSec=5
+RuntimeDirectory=gunicorn
+ExecStart=/opt/xmmcg/.venv/bin/gunicorn xmmcg.wsgi:application --bind unix:/run/gunicorn/xmmcg.sock --workers 2 --timeout 300 --access-logfile - --error-logfile -
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
