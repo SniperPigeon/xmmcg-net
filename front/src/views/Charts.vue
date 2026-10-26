@@ -1,7 +1,7 @@
 <template>
   <div class="contest-page">
     <h2>谱面投稿</h2>
-    <p>上传完整谱面及配套素材。可自由选曲，无需先上传歌曲或参与抽选。</p>
+    <p>上传完整谱面及配套素材。可自由选曲。</p>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <el-card class="section">
       <template #header>提交作品</template>

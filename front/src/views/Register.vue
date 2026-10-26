@@ -34,7 +34,9 @@
             show-password
             autocomplete="off"
         /></label>
-        <p>联系方式使用大号的资料。绑定后，大小号不能给彼此的作品评分。</p>
+        <p>
+          联系方式使用大号的资料。一个大号可绑定多个小号，数量不限；大号与同组小号之间不能互相评分。
+        </p>
       </template>
       <template v-else>
         <label
