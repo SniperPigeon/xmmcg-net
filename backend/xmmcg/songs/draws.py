@@ -26,7 +26,7 @@ def join_draw(user):
 
 @transaction.atomic
 def run_draw(phase_id):
-    # The same lock is used by uploads/joining, so the pool cannot change mid-draw.
+    # 抽选和报名使用同一短写事务，避免抽选期间改变参与者或曲目池。
     phase = CompetitionPhase.objects.select_for_update().get(pk=phase_id)
     if (
         phase.kind != "song_selection"
@@ -45,7 +45,7 @@ def run_draw(phase_id):
     rng.shuffle(songs)
     rng.shuffle(entries)
     for index, entry in enumerate(entries):
-        # Balanced reuse allows fewer songs than participants without special bidding rules.
+        # 曲目少于参与者时均衡复用，不引入竞价或保底规则。
         entry.song = songs[index % len(songs)]
     SongDrawEntry.objects.bulk_update(entries, ["song"])
     draw.completed_at = timezone.now()

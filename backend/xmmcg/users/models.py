@@ -4,8 +4,13 @@ from django.db import models
 
 
 class UserProfile(models.Model):
+    """用户扩展信息模型。"""
+
     user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="profile",
+        verbose_name="用户",
     )
     qqid = models.CharField(
         max_length=20,
@@ -13,17 +18,25 @@ class UserProfile(models.Model):
         null=True,
         blank=True,
         help_text="小号留空，使用大号联系方式",
+        verbose_name="QQ号",
     )
-    preferred_name = models.CharField(max_length=50, blank=True, default="")
+    preferred_name = models.CharField(
+        max_length=50,
+        blank=True,
+        default="",
+        verbose_name="谱师名义",
+        help_text="谱师名义（展示用名称）",
+    )
     main_account = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
         blank=True,
         on_delete=models.PROTECT,
         related_name="alternate_profiles",
+        verbose_name="绑定大号",
     )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
 
     class Meta:
         verbose_name = verbose_name_plural = "用户资料"
@@ -50,7 +63,7 @@ class UserProfile(models.Model):
 
 
 def identity_id(user):
-    """One person has one review identity; login and staff permissions remain separate."""
+    """同一人的绑定账号共用评分身份；登录账号和管理员权限仍然独立。"""
     try:
         return user.profile.main_account_id or user.pk
     except UserProfile.DoesNotExist:

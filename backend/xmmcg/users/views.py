@@ -3,7 +3,6 @@ from django.contrib.auth import (
     login as auth_login,
     logout as auth_logout,
     get_user_model,
-    update_session_auth_hash,
 )
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -29,16 +28,8 @@ class EndpointThrottle(SimpleRateThrottle):
         }
 
 
-class RegistrationThrottle(EndpointThrottle):
-    scope = "registration"
-
-
 class AccountSearchThrottle(EndpointThrottle):
     scope = "account_search"
-
-
-class LoginThrottle(EndpointThrottle):
-    scope = "login"
 
 
 @api_view(["GET"])
@@ -49,7 +40,6 @@ def csrf_token_view(request):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
-@throttle_classes([RegistrationThrottle])
 @csrf_protect
 def register(request):
     serializer = UserRegistrationSerializer(data=request.data)
@@ -82,7 +72,6 @@ def search_accounts(request):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
-@throttle_classes([LoginThrottle])
 @csrf_protect
 def login(request):
     user = authenticate(
@@ -109,7 +98,7 @@ def get_current_user(request):
     return Response(UserDetailSerializer(request.user).data)
 
 
-@api_view(["PATCH"])
+@api_view(["PUT", "PATCH"])
 @permission_classes([IsAuthenticated])
 @transaction.atomic
 def update_profile(request):
@@ -136,7 +125,15 @@ def update_profile(request):
             raise ValidationError("邮箱已使用")
         request.user.email = email
         request.user.save(update_fields=["email"])
-    return Response(UserDetailSerializer(request.user).data)
+    # 清除用户对象可能缓存的旧资料，返回刚保存的中文名义。
+    request.user.refresh_from_db()
+    return Response(
+        {
+            "success": True,
+            "message": "个人信息已更新",
+            "user": UserDetailSerializer(request.user).data,
+        }
+    )
 
 
 @api_view(["POST"])
@@ -153,5 +150,4 @@ def change_password(request):
         raise ValidationError(error.messages)
     request.user.set_password(password)
     request.user.save(update_fields=["password"])
-    update_session_auth_hash(request, request.user)
     return Response({"success": True})

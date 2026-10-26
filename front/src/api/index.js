@@ -41,7 +41,7 @@ export const logout = () => api.post('/users/logout/')
 export const register = (data) => api.post('/users/register/', data)
 export const searchAccounts = (q) => api.get('/users/accounts/', { params: { q } })
 export const getUserProfile = () => api.get('/users/me/')
-export const updateUserProfile = (data) => api.patch('/users/profile/', data)
+export const updateUserProfile = async (data) => (await api.patch('/users/profile/', data)).user
 export const getCompetitionStatus = () => api.get('/contest/status/')
 export const getCompetitionPhases = () => api.get('/contest/phases/')
 export const getBanners = () => api.get('/contest/banners/')

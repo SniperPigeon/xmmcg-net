@@ -1,4 +1,4 @@
-"""One review identity, one score per chart, no self-review."""
+"""每人每谱一份评分，不分配本人或绑定账号参与制作的谱面。"""
 
 from collections import Counter
 from decimal import Decimal
@@ -48,7 +48,7 @@ def require_reviewer(user):
 @transaction.atomic
 def allocate_reviews(*, commit=False):
     config = ContestSettings.current()
-    # Serialize allocations and score submission without deleting previous work.
+    # 在同一短写事务中分配任务，保留已有任务和已提交评分。
     config = ContestSettings.objects.select_for_update().get(pk=config.pk)
     charts = list(reviewable_charts())
     participants = reviewer_ids()

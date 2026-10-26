@@ -7,8 +7,11 @@
         currentUser.main_account?.username || '独立账号'
       }}</el-descriptions-item>
       <el-descriptions-item label="邮箱">{{ currentUser.email }}</el-descriptions-item>
-      <el-descriptions-item label="QQ">{{ currentUser.qqid }}</el-descriptions-item>
-      <el-descriptions-item label="谱面数量">{{ currentUser.chartsCount }}</el-descriptions-item>
+      <el-descriptions-item label="QQ号">{{ currentUser.qqid }}</el-descriptions-item>
+      <el-descriptions-item label="注册时间">{{
+        new Date(currentUser.date_joined).toLocaleString('zh-CN')
+      }}</el-descriptions-item>
+      <el-descriptions-item label="提交谱面">{{ currentUser.chartsCount }}</el-descriptions-item>
     </el-descriptions>
     <form @submit.prevent="save">
       <label>谱师名义<el-input v-model="name" maxlength="50" /></label

@@ -21,7 +21,7 @@ const router = createRouter({
   ],
 })
 router.beforeEach(async (to) => {
-  document.title = `${to.meta.title} · XMMCG`
+  document.title = `${to.meta.title} -  小妹妹唱歌net`
   if (to.meta.requiresAuth && !(await loadSession()))
     return { path: '/login', query: { redirect: to.fullPath } }
 })

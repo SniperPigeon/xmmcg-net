@@ -10,9 +10,7 @@ User = get_user_model()
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, validators=[validate_password])
     password_confirm = serializers.CharField(write_only=True)
-    qqid = serializers.RegexField(
-        r"^[1-9][0-9]{4,19}$", required=False, write_only=True
-    )
+    qqid = serializers.CharField(required=False, write_only=True)
     main_account_id = serializers.IntegerField(required=False, write_only=True)
     main_password = serializers.CharField(required=False, write_only=True)
 
@@ -87,6 +85,7 @@ class UserDetailSerializer(serializers.ModelSerializer):
             "preferred_name",
             "main_account",
             "is_staff",
+            "is_active",
             "date_joined",
             "songsCount",
             "chartsCount",

@@ -1,9 +1,14 @@
 <template>
   <el-card class="register-card">
-    <template #header><h2>注册账号</h2></template>
+    <template #header><h2>用户注册</h2></template>
     <form @submit.prevent="submit">
       <label
-        >用户名<el-input v-model="form.username" required autocomplete="username" maxlength="150"
+        >用户名<el-input
+          v-model="form.username"
+          required
+          autocomplete="username"
+          minlength="3"
+          maxlength="20"
       /></label>
       <el-checkbox v-model="bindMain">这是我的小号，绑定已有大号</el-checkbox>
       <template v-if="bindMain">
@@ -32,7 +37,13 @@
         <p>联系方式使用大号的资料。绑定后，大小号不能给彼此的作品评分。</p>
       </template>
       <template v-else>
-        <label>QQ 号<el-input v-model="form.qqid" required inputmode="numeric" /></label>
+        <label
+          >QQ 号<el-input
+            v-model="form.qqid"
+            required
+            inputmode="numeric"
+            pattern="[1-9][0-9]{4,14}"
+        /></label>
         <label
           >邮箱<el-input v-model="form.email" required type="email" autocomplete="email"
         /></label>
