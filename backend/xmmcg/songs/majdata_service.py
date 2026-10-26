@@ -112,14 +112,20 @@ def upload_chart(chart):
 
 def sync_chart(chart):
     if not settings.ENABLE_CHART_FORWARD_TO_MAJDATA:
-        Chart.objects.filter(pk=chart.pk, net_sync_status="pending").update(
-            net_sync_status="disabled"
-        )
+        Chart.objects.filter(
+            pk=chart.pk,
+            competition__status="active",
+            status="submitted",
+            net_sync_status="pending",
+        ).update(net_sync_status="disabled")
         chart.refresh_from_db()
         return chart
     # Compare-and-set prevents concurrent retries and never automatically resends uncertain requests.
     claimed = Chart.objects.filter(
-        pk=chart.pk, net_sync_status__in=["pending", "failed", "disabled"]
+        pk=chart.pk,
+        competition__status="active",
+        status="submitted",
+        net_sync_status__in=["pending", "failed", "disabled"],
     ).update(net_sync_status="syncing", net_sync_error="")
     if claimed:
         try:

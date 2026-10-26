@@ -9,8 +9,9 @@ from django.db import transaction
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from users.models import identity_id
-from .models import Chart, ContestSettings, PeerReview, PeerReviewAllocation
+from .models import Chart, Competition, PeerReview, PeerReviewAllocation
 from .phases import require_capability
+from .competitions import require_active
 
 
 def authors(chart):
@@ -19,17 +20,17 @@ def authors(chart):
     }
 
 
-def reviewable_charts():
+def reviewable_charts(competition):
     return (
-        Chart.objects.filter(status="submitted")
+        Chart.objects.filter(competition=competition, status="submitted")
         .select_related("user__profile")
         .prefetch_related("contributors__profile")
     )
 
 
-def reviewer_ids():
+def reviewer_ids(competition):
     result = set()
-    for chart in reviewable_charts():
+    for chart in reviewable_charts(competition):
         result.update(authors(chart))
     return set(
         get_user_model()
@@ -38,24 +39,32 @@ def reviewer_ids():
     )
 
 
-def require_reviewer(user):
+def require_reviewer(user, competition):
     person = identity_id(user)
-    if person not in reviewer_ids():
+    if person not in reviewer_ids(competition):
         raise PermissionDenied("提交谱面后才可参与评分（绑定小号的投稿也计入）")
     return person
 
 
 @transaction.atomic
-def allocate_reviews(*, commit=False):
-    config = ContestSettings.current()
+def allocate_reviews(*, commit=False, competition_id=None):
+    config = require_active(competition_id)
     # 在同一短写事务中分配任务，保留已有任务和已提交评分。
-    config = ContestSettings.objects.select_for_update().get(pk=config.pk)
-    charts = list(reviewable_charts())
-    participants = reviewer_ids()
+    config = Competition.objects.select_for_update().get(pk=config.pk)
+    charts = list(reviewable_charts(config))
+    participants = reviewer_ids(config)
     if not charts or not participants:
         raise ValidationError("没有可分配的谱面或评分者")
-    pairs = set(PeerReviewAllocation.objects.values_list("reviewer_id", "chart_id"))
-    pairs.update(PeerReview.objects.values_list("reviewer_id", "chart_id"))
+    pairs = set(
+        PeerReviewAllocation.objects.filter(chart__competition=config).values_list(
+            "reviewer_id", "chart_id"
+        )
+    )
+    pairs.update(
+        PeerReview.objects.filter(chart__competition=config).values_list(
+            "reviewer_id", "chart_id"
+        )
+    )
     task_counts = Counter(person for person, chart in pairs)
     chart_counts = Counter(chart for person, chart in pairs)
     additions = []
@@ -109,10 +118,9 @@ class ReviewInput(serializers.Serializer):
 
 @transaction.atomic
 def submit_reviews(user, items):
-    require_capability("review")
-    person = require_reviewer(user)
-    config = ContestSettings.current()
-    config = ContestSettings.objects.select_for_update().get(pk=config.pk)
+    config = require_capability("review")
+    person = require_reviewer(user, config)
+    config = Competition.objects.select_for_update().get(pk=config.pk)
     serializer = ReviewInput(data=items, many=True)
     serializer.is_valid(raise_exception=True)
     rows = serializer.validated_data
@@ -124,11 +132,11 @@ def submit_reviews(user, items):
     if PeerReview.objects.filter(reviewer_id=person, chart_id__in=ids).exists():
         raise ValidationError("包含已经提交过的评分，请刷新任务列表")
     used_favorites = PeerReview.objects.filter(
-        reviewer_id=person, favorite=True
+        reviewer_id=person, chart__competition=config, favorite=True
     ).count()
     if used_favorites + sum(row["favorite"] for row in rows) > config.max_favorites:
         raise ValidationError(f"每人最多 {config.max_favorites} 张真爱票")
-    charts = {chart.pk: chart for chart in reviewable_charts().filter(pk__in=ids)}
+    charts = {chart.pk: chart for chart in reviewable_charts(config).filter(pk__in=ids)}
     allocations = dict(
         PeerReviewAllocation.objects.filter(
             reviewer_id=person, chart_id__in=ids

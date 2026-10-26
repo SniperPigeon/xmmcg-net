@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from users.models import identity_id
 from .exports import export_peer_review_scores
-from .models import ContestSettings, PeerReview, PeerReviewAllocation
+from .models import Competition, PeerReview, PeerReviewAllocation
 from .phases import capabilities
 from .reviews import (
     allocate_reviews,
@@ -19,15 +19,15 @@ from .reviews import (
 @permission_classes([IsAuthenticated])
 def tasks(request):
     person = identity_id(request.user)
-    config = ContestSettings.current()
+    config = Competition.current()
     reviews = {
         review.chart_id: review
-        for review in PeerReview.objects.filter(reviewer_id=person).select_related(
-            "chart"
-        )
+        for review in PeerReview.objects.filter(
+            reviewer_id=person, chart__competition=config
+        ).select_related("chart")
     }
     allocated = PeerReviewAllocation.objects.filter(
-        reviewer_id=person, chart__status="submitted"
+        reviewer_id=person, chart__competition=config, chart__status="submitted"
     ).select_related("chart")
 
     def row(chart, allocation=None):
@@ -53,11 +53,11 @@ def tasks(request):
     return Response(
         {
             "tasks": result,
-            "can_review": person in reviewer_ids(),
-            "is_open": capabilities()["review"],
+            "can_review": person in reviewer_ids(config),
+            "is_open": capabilities(config)["review"],
             "config": {
-                "max_score": str(config.max_score),
-                "max_favorites": config.max_favorites,
+                "max_score": str(config.max_score) if config else "0",
+                "max_favorites": config.max_favorites if config else 0,
             },
             "favorites_used": sum(review.favorite for review in reviews.values()),
         }
@@ -67,19 +67,22 @@ def tasks(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def available(request):
+    config = Competition.current()
     person = identity_id(request.user)
     excluded = set(
-        PeerReview.objects.filter(reviewer_id=person).values_list("chart_id", flat=True)
+        PeerReview.objects.filter(
+            reviewer_id=person, chart__competition=config
+        ).values_list("chart_id", flat=True)
     )
     excluded.update(
-        PeerReviewAllocation.objects.filter(reviewer_id=person).values_list(
-            "chart_id", flat=True
-        )
+        PeerReviewAllocation.objects.filter(
+            reviewer_id=person, chart__competition=config
+        ).values_list("chart_id", flat=True)
     )
     return Response(
         [
             {"id": chart.pk, "title": chart.title, "designer": chart.designer}
-            for chart in reviewable_charts().exclude(pk__in=excluded)
+            for chart in reviewable_charts(config).exclude(pk__in=excluded)
             if person not in authors(chart)
         ]
     )

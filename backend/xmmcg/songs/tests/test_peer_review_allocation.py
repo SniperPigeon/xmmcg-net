@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework.exceptions import ValidationError
-from songs.models import Chart, ContestSettings, PeerReview, PeerReviewAllocation
+from songs.models import Chart, Competition, PeerReview, PeerReviewAllocation
 from songs.reviews import allocate_reviews, submit_reviews
 from users.models import UserProfile
 
@@ -16,8 +16,19 @@ def make_user(name, main=None):
     return user
 
 
-def make_chart(user, title="chart"):
-    chart = Chart.objects.create(user=user, title=title, designer=user.username)
+def make_competition():
+    return Competition.current() or Competition.objects.create(
+        name="测试比赛", status="active"
+    )
+
+
+def make_chart(user, title="chart", competition=None):
+    chart = Chart.objects.create(
+        competition=competition or make_competition(),
+        user=user,
+        title=title,
+        designer=user.username,
+    )
     chart.contributors.add(user)
     return chart
 
@@ -26,7 +37,7 @@ class ReviewTests(TestCase):
     def setUp(self):
         self.users = [make_user(f"user{i}") for i in range(4)]
         self.charts = [make_chart(user) for user in self.users]
-        self.config = ContestSettings.current()
+        self.config = Competition.current()
         self.config.reviews_per_chart = 3
         self.config.save()
 

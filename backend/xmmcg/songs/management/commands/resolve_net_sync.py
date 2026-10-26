@@ -17,7 +17,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         records = Chart.objects.filter(
-            pk=options["chart_id"], net_sync_status__in=["unknown", "syncing"]
+            pk=options["chart_id"],
+            competition__status="active",
+            net_sync_status__in=["unknown", "syncing"],
         )
         if options["synced"]:
             url = options["url"]

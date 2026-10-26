@@ -12,7 +12,7 @@ from rest_framework.exceptions import ValidationError, PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from .majdata_service import sync_chart
-from .models import Chart
+from .models import Chart, Competition
 from .phases import require_capability
 from .serializers import ChartSerializer, ChartUploadSerializer
 from .uploads import discard_new_assets, store_new_assets
@@ -41,17 +41,23 @@ def chart_list(queryset, request):
 @api_view(["GET", "POST"])
 def charts_root(request):
     if request.method == "GET":
-        return chart_list(Chart.objects.filter(status="submitted"), request)
+        return chart_list(
+            Chart.objects.filter(competition=Competition.current(), status="submitted"),
+            request,
+        )
     if not request.user.is_authenticated:
         raise PermissionDenied("请先登录")
-    require_capability("chart_upload")
+    competition = require_capability("chart_upload")
     try:
         key = UUID(str(request.data.get("submission_key", "")))
     except ValueError:
         raise ValidationError("缺少有效的投稿标识")
     existing = Chart.objects.filter(submission_key=key).first()
     if existing:
-        if existing.user_id != request.user.pk:
+        if (
+            existing.user_id != request.user.pk
+            or existing.competition_id != competition.pk
+        ):
             raise ValidationError("投稿标识已使用")
         return Response(
             {
@@ -62,11 +68,15 @@ def charts_root(request):
     serializer = ChartUploadSerializer(data=request.data, context={"request": request})
     serializer.is_valid(raise_exception=True)
     chart = Chart(
-        user=request.user, submitted_at=timezone.now(), **serializer.validated_data
+        competition=competition,
+        user=request.user,
+        submitted_at=timezone.now(),
+        **serializer.validated_data,
     )
     try:
         store_new_assets(chart)
         with transaction.atomic():
+            require_capability("chart_upload", competition.pk)
             chart.save()
             chart.contributors.add(request.user)
     except Exception as error:
@@ -87,19 +97,26 @@ def charts_root(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_charts(request):
-    return chart_list(Chart.objects.filter(user=request.user), request)
+    return chart_list(
+        Chart.objects.filter(user=request.user, competition=Competition.current()),
+        request,
+    )
 
 
 @api_view(["GET"])
 def chart_detail(request, chart_id):
-    chart = get_object_or_404(Chart, pk=chart_id, status="submitted")
+    chart = get_object_or_404(
+        Chart, pk=chart_id, competition=Competition.current(), status="submitted"
+    )
     return Response(ChartSerializer(chart, context={"request": request}).data)
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def retry_sync(request, chart_id):
-    chart = get_object_or_404(Chart, pk=chart_id)
+    chart = get_object_or_404(
+        Chart, pk=chart_id, competition=Competition.current(), status="submitted"
+    )
     if chart.user_id != request.user.pk and not request.user.is_staff:
         raise PermissionDenied("只能重试自己的投稿")
     if chart.net_sync_status in ("unknown", "syncing"):
@@ -110,7 +127,9 @@ def retry_sync(request, chart_id):
 
 @api_view(["GET"])
 def download_bundle(request, chart_id):
-    chart = get_object_or_404(Chart, pk=chart_id, status="submitted")
+    chart = get_object_or_404(
+        Chart, pk=chart_id, competition=Competition.current(), status="submitted"
+    )
     output = BytesIO()
     with ZipFile(output, "w", ZIP_DEFLATED) as archive:
         for name, stem in (

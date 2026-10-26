@@ -14,7 +14,7 @@ from rest_framework.test import APIClient
 from songs.models import Chart, CompetitionPhase, Song, SongDrawEntry
 from songs.draws import join_draw, run_draw
 from songs.majdata_service import sync_chart
-from .test_peer_review_allocation import make_user, make_chart
+from .test_peer_review_allocation import make_user, make_chart, make_competition
 
 
 def upload_files(**overrides):
@@ -35,9 +35,10 @@ def upload_files(**overrides):
     return {**data, **overrides}
 
 
-def phase(kind="song_selection", offset=0):
+def phase(kind="song_selection", offset=0, competition=None):
     now = timezone.now() + timedelta(days=offset)
     return CompetitionPhase.objects.create(
+        competition=competition or make_competition(),
         name=kind,
         phase_key=str(uuid4()),
         kind=kind,
@@ -48,6 +49,7 @@ def phase(kind="song_selection", offset=0):
 
 class ChartTests(TestCase):
     def setUp(self):
+        make_competition()
         self.user = make_user("author")
         self.client = APIClient()
         self.client.force_authenticate(self.user)
@@ -137,6 +139,7 @@ class ChartTests(TestCase):
 
 class DrawTests(TestCase):
     def setUp(self):
+        make_competition()
         self.user = make_user("songauthor")
         self.client = APIClient()
         self.client.force_authenticate(self.user)
@@ -193,6 +196,7 @@ class DrawTests(TestCase):
 
 class UploadFailureTests(TestCase):
     def test_partial_object_write_is_cleaned_up(self):
+        make_competition()
         user = make_user("upload-failure")
         client = APIClient()
         client.force_authenticate(user)

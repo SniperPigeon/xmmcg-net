@@ -1,0 +1,12 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h2>{{ competition.name }}</h2>
+{% if action == 'archive' %}
+<p>归档后，本届比赛及其阶段、投稿、抽选和评分将变为只读，保留 R2 文件与成绩导出。此入口不能撤销归档。</p>
+<p>本届有 {{ charts_count }} 张谱面、{{ songs_count }} 首歌曲、{{ reviews_count }} 条评分，均会保留。</p>
+{% else %}
+<p>启用后，首页将展示本届比赛，投稿和评分按照本届开关及阶段时间开放。全站只能有一届进行中的比赛。</p>
+<p>请先确认阶段日期和启用开关。没有投稿或评分阶段时，相应功能只受比赛配置的开关控制；没有歌曲抽选阶段时，歌曲功能关闭。</p>
+{% endif %}
+<form method="post">{% csrf_token %}<input type="submit" value="确认{{ title }}"> <a href="{% url 'admin:songs_competition_change' competition.pk %}">返回比赛</a></form>
+{% endblock %}

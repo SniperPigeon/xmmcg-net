@@ -4,6 +4,8 @@
 
 ## 比赛流程
 
+- **比赛换届**：后台「比赛」支持新建、启用和归档，配置与阶段按届管理；旧数据迁入只读「历史比赛」。操作步骤见 [比赛管理与换届](doc/COMPETITIONS.md)。
+
 - **谱面投稿**：登录后直接提交 `maidata.txt`、音频、封面及可选视频；自由选曲，没有竞标资格或分阶段创作要求。文件内容按原样保存并发送到 Net。
 - **歌曲抽选（可选）**：创建并启用 `song_selection` 类型的比赛阶段。上传歌曲自动报名，也可直接报名。管理员执行一次抽选，每个实际用户分配一首歌；歌曲不足时均衡复用。结果不限制谱面选曲。没有启用该阶段时，入口与 API 同时关闭。
 - **评分**：每谱目标评分数、满分及真爱票上限可在后台配置。均衡分配任务并排除本人及绑定账号参与创作的作品；同一实际用户对同一谱面只能评分一次。支持小数、评语、额外评分和 Excel 导出。
@@ -54,9 +56,9 @@ npm run format:check
 ## 结构与迁移
 
 - `users/`：登录、注册及大小号身份。
-- `songs/models.py`：谱面、阶段、歌曲抽选、评分及只读旧数据归档。
+- `songs/models.py`：比赛、谱面、阶段、歌曲抽选、评分及只读旧数据归档。
 - `songs/chart_views.py`、`song_views.py`、`review_views.py`：各业务接口。
-- `songs/phases.py`、`draws.py`、`reviews.py`：阶段权限和业务服务。
+- `songs/competitions.py`、`phases.py`、`draws.py`、`reviews.py`：比赛生命周期、阶段权限和业务服务。
 - `songs/majdata_service.py`：读取 R2 文件流并同步 Net。
 - `xmmcg/storage.py`：R2 与桶 CORS 配置。
 

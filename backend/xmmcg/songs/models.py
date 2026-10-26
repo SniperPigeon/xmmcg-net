@@ -119,6 +119,57 @@ class Announcement(models.Model):
         return self.title
 
 
+class Competition(models.Model):
+    name = models.CharField(max_length=100, verbose_name="比赛名称")
+    status = models.CharField(
+        max_length=16,
+        choices=[("draft", "筹备中"), ("active", "进行中"), ("archived", "已归档")],
+        default="draft",
+        editable=False,
+        verbose_name="状态",
+    )
+    submissions_open = models.BooleanField(default=True, verbose_name="允许投稿")
+    reviews_open = models.BooleanField(default=True, verbose_name="允许评分")
+    reviews_per_chart = models.PositiveIntegerField(
+        default=8, validators=[MinValueValidator(1)], verbose_name="每谱目标评分数"
+    )
+    max_score = models.DecimalField(
+        max_digits=7,
+        decimal_places=2,
+        default=50,
+        validators=[MinValueValidator(Decimal("0.25"))],
+        verbose_name="满分",
+    )
+    max_favorites = models.PositiveIntegerField(
+        default=3, verbose_name="每人真爱票上限"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
+    activated_at = models.DateTimeField(
+        null=True, editable=False, verbose_name="启用时间"
+    )
+    archived_at = models.DateTimeField(
+        null=True, editable=False, verbose_name="归档时间"
+    )
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        verbose_name = verbose_name_plural = "比赛"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["status"],
+                condition=models.Q(status="active"),
+                name="one_active_competition",
+            )
+        ]
+
+    @classmethod
+    def current(cls):
+        return cls.objects.filter(status="active").first()
+
+    def __str__(self):
+        return self.name
+
+
 class CompetitionPhase(models.Model):
     """比赛阶段管理模型，用于日程展示及功能开放控制。"""
 
@@ -128,8 +179,14 @@ class CompetitionPhase(models.Model):
         ("submission", "谱面投稿"),
         ("review", "评分"),
     ]
+    competition = models.ForeignKey(
+        Competition,
+        on_delete=models.PROTECT,
+        related_name="phases",
+        verbose_name="比赛",
+    )
     name = models.CharField(max_length=100, verbose_name="名称")
-    phase_key = models.CharField(max_length=50, unique=True, verbose_name="阶段标识")
+    phase_key = models.CharField(max_length=50, verbose_name="阶段标识")
     kind = models.CharField(
         max_length=30, choices=KIND_CHOICES, default="display", verbose_name="类型"
     )
@@ -151,10 +208,13 @@ class CompetitionPhase(models.Model):
         ordering = ["order", "start_time"]
         verbose_name = verbose_name_plural = "比赛阶段"
         constraints = [
+            models.UniqueConstraint(
+                fields=["competition", "phase_key"], name="unique_phase_per_competition"
+            ),
             models.CheckConstraint(
                 condition=models.Q(end_time__gt=models.F("start_time")),
                 name="phase_positive_duration",
-            )
+            ),
         ]
 
     @property
@@ -192,46 +252,13 @@ class CompetitionPhase(models.Model):
         return self.name
 
 
-class ContestSettings(models.Model):
-    id = models.PositiveSmallIntegerField(
-        primary_key=True, default=1, editable=False, verbose_name="ID"
-    )
-    submissions_open = models.BooleanField(default=True, verbose_name="允许投稿")
-    reviews_open = models.BooleanField(default=True, verbose_name="允许评分")
-    reviews_per_chart = models.PositiveIntegerField(
-        default=8, validators=[MinValueValidator(1)], verbose_name="每谱目标评分数"
-    )
-    max_score = models.DecimalField(
-        max_digits=7,
-        decimal_places=2,
-        default=50,
-        validators=[MinValueValidator(Decimal("0.25"))],
-        verbose_name="满分",
-    )
-    max_favorites = models.PositiveIntegerField(
-        default=3, verbose_name="每人真爱票上限"
-    )
-
-    class Meta:
-        verbose_name = verbose_name_plural = "比赛配置"
-        constraints = [
-            models.CheckConstraint(
-                condition=models.Q(id=1), name="one_contest_settings"
-            )
-        ]
-
-    @classmethod
-    def current(cls):
-        return cls.objects.get_or_create(pk=1)[0]
-
-    def __str__(self):
-        return "比赛配置"
-
-
 class Song(models.Model):
     """用户上传的歌曲素材。"""
 
     id = models.AutoField(primary_key=True, verbose_name="ID")
+    competition = models.ForeignKey(
+        Competition, on_delete=models.PROTECT, related_name="songs", verbose_name="比赛"
+    )
     unique_key = models.UUIDField(
         default=uuid.uuid4, editable=False, unique=True, verbose_name="唯一标识"
     )
@@ -309,6 +336,12 @@ class Chart(models.Model):
         ("unknown", "需核对远端结果"),
         ("disabled", "未启用同步"),
     ]
+    competition = models.ForeignKey(
+        Competition,
+        on_delete=models.PROTECT,
+        related_name="charts",
+        verbose_name="比赛",
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,

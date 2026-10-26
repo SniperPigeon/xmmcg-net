@@ -17,7 +17,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from .models import Chart, PeerReview
+from .models import Chart, Competition, PeerReview
 
 # 样式常量
 _FILL_TITLE = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
@@ -48,8 +48,10 @@ def safe_cell(value):
     )
 
 
-def export_peer_review_scores(chart_ids=None) -> bytes:
+def export_peer_review_scores(chart_ids=None, *, competition=None) -> bytes:
     """保留原有中文双工作表、列分组、格式、排序及署名优先级。"""
+    if chart_ids is None and competition is None:
+        competition = Competition.current()
     charts_qs = (
         Chart.objects.select_related("user", "user__profile")
         .filter(status="submitted")
@@ -57,6 +59,8 @@ def export_peer_review_scores(chart_ids=None) -> bytes:
     )
     if chart_ids is not None:
         charts_qs = charts_qs.filter(id__in=chart_ids)
+    if chart_ids is None:
+        charts_qs = charts_qs.filter(competition=competition)
     charts = list(charts_qs)
     records = (
         PeerReview.objects.filter(chart_id__in=[chart.pk for chart in charts])
