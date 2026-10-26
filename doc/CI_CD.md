@@ -66,16 +66,20 @@ sudo bash update.sh <通过检查的完整提交SHA>
 
 `deploy_frontend.sh` 仅构建和发布当前检出版本的前端，不修改数据库或 Gunicorn。`scripts/build.sh` 是两条路径共用的服务器构建实现，不自行拉取 Git。
 
-## 当前服务器首次切换到重构版前
+## 首次切换状态（2026-10-26 发布前复核）
 
-通过 1Panel 只读核对的环境为 Debian 13、Python 3.13.5、Node 20.20.2、Nginx 1.26.3。Node 20 实测可以构建当前产物，但部分依赖声明要求 Node 22；首次切换前请将主机构建环境准备为 Node 22.12+，增量流程会在停服前检查，并且不会擅自升级系统运行时。项目、venv、前端和服务 socket 均沿用已有目录。没有在这次检查中执行部署、重启服务或上传谱面。
+服务器仍运行旧版应用，main 为 `80da1ac`。Node 已准备为 22.23.4，npm 为 10.9.9；Gunicorn 与 Nginx 均为 active，HTTPS 管理后台返回 200。项目、venv、前端和服务 socket 沿用已有目录，Gunicorn 的 RuntimeDirectory drop-in 已就绪。
 
-现有仓库存在未提交的数据库、前端依赖和旧阶段脚本改动，且旧版把 db.sqlite3 纳入了 Git。**不能直接强制 checkout/reset**：新版已停止跟踪数据库，直接切换可能删除旧路径。首次切换前应停止写入，使用 SQLite 在线备份，保留服务器代码差异，按 MIGRATION.md 完成迁移准备并人工整理这些差异。新自动部署入口遇到该状态会提前退出。
+旧服务器代码差异已保存在本地备份分支，生产数据库已解除 Git 跟踪，受跟踪文件工作区干净。原始数据库、媒体和配置备份位于 `/var/back/xmmcg/pre-refactor-20261026T072228Z`。生产 SQLite 完整性检查通过，仍有 54 个用户、59 张谱面、83 首歌曲、261 条评分，尚未执行新版迁移；发布时 `build.sh` 会再次备份当时的数据库。不要用演练副本覆盖生产数据。
 
-当前 Nginx 的 HTTPS 段落由 Certbot 管理，仍使用旧 `/static/` 和 `/media/` 本地 alias。首次切换时把 backend/nginx.conf 的路由和缓存规则合并进现有 443 server 块，保留证书、TLS include 和 80→443 跳转；通过 `nginx -t` 后重载。后续自动更新不会覆写该文件。
+此前已在服务器独立副本上完成迁移、历史媒体导入和 R2 静态资源验证。Nginx 候选配置 `/etc/nginx/sites-available/xmmcg.refactor-ready` 已准备，保留 Certbot 的证书、TLS include 和 HTTP 跳转，尚未启用。**首次合并后的自动部署不会替换 Nginx 配置，CI 成功后还需要完成路由切换。**
 
-现有 Gunicorn unit 未声明 RuntimeDirectory，检查时 `/run/gunicorn` 不存在。新版构建会安装只包含 RuntimeDirectory 的 systemd drop-in，并 daemon-reload，保留原有 4 workers、2 threads、120 秒超时及日志位置；socket 目录随服务启动自动创建。
+首次发布顺序：
 
-首次切换不要直接运行服务器里旧版本的 update.sh；旧脚本仍然是 git pull 流程，没有新版的数据库保护。CI 会从已通过检查的提交发送新的 remote_deploy.sh，因此会提前识别并拒绝这种状态。
+1. 确认 PR 最终提交全部检查通过，在安排好的发布窗口合并至 main；main 检查通过后由 SSH 部署任务执行代码切换、备份、迁移及构建。
+2. 部署成功后，在服务器执行 `sudo bash /opt/xmmcg-preparation/activate-nginx.sh`。已准备的脚本会核对新版比赛表和 Nginx 模板摘要，备份原配置，执行 `nginx -t` 后重载，并验证 HTTPS API 与 R2 静态资源。如果模板摘要变化，应重新核对候选配置，不跳过检查。
+3. 验证登录、历史比赛成绩导出和谱面下载；移除仍配置的旧阶段更新定时任务。按 [比赛管理与换届](COMPETITIONS.md) 新建并配置比赛，确认窗口后启用。历史数据迁入归档比赛，不会自动开放新一届。
 
-这些首次切换准备需要在启用生产自动部署前完成。增量脚本不会静默丢弃服务器改动，也不会把当前生产数据库替换为空库。
+生产进程的 `ENABLE_CHART_FORWARD_TO_MAJDATA` 当前为 False。正式恢复 Net 转发前需单独确认配置；升级和联调不通过重试历史谱面验证转发。
+
+首次切换不要执行服务器中旧版本的 `update.sh`，它仍使用没有新版保护的 git pull 流程。CI 从已通过检查的提交发送新 `remote_deploy.sh`；增量部署不会丢弃服务器差异或将生产数据库替换为空库。迁移后回滚必须同时恢复数据库备份与匹配的旧代码。

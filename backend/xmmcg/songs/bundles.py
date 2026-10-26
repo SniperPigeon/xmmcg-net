@@ -29,7 +29,11 @@ def write_chart(archive, chart, prefix="", *, original_names=False):
         filename = PurePosixPath(field.name)
         if name == "background_video" and filename.name.lower().startswith("pv"):
             stem = "pv"
-        archive_name = filename.name if original_names else stem + filename.suffix
+        suffix = filename.suffix.lower()
+        if name == "cover_image":
+            # 与 Net 协议一致，播放器只查找 bg.jpg / bg.png；不重编码原图。
+            suffix = ".jpg" if suffix in (".jpg", ".jpeg") else ".png"
+        archive_name = filename.name if original_names else stem + suffix
         try:
             with (
                 field.open("rb") as source,

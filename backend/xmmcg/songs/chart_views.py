@@ -114,8 +114,10 @@ def retry_sync(request, chart_id):
     chart = get_object_or_404(
         Chart, pk=chart_id, competition=Competition.current(), status="submitted"
     )
-    if chart.user_id != request.user.pk and not request.user.is_staff:
-        raise PermissionDenied("只能重试自己的投稿")
+    if chart.user_id != request.user.pk and not (
+        request.user.is_staff and request.user.has_perm("songs.change_chart")
+    ):
+        raise PermissionDenied("只能重试自己的投稿，或由有谱面修改权限的管理员操作")
     if chart.net_sync_status in ("unknown", "syncing"):
         raise ValidationError("请先由管理员核对 Net 上的上传结果")
     sync_chart(chart)

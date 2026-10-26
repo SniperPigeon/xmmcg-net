@@ -2,7 +2,7 @@ from django.db import transaction
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from users.models import identity_id
@@ -82,6 +82,8 @@ def join(request):
 @api_view(["POST"])
 @permission_classes([IsAdminUser])
 def draw(request, phase_id):
+    if not request.user.has_perm("songs.change_competitionphase"):
+        raise PermissionDenied("没有执行歌曲抽选的权限")
     get_object_or_404(CompetitionPhase, pk=phase_id)
     result = run_draw(phase_id)
     return Response(

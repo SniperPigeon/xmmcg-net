@@ -1,5 +1,6 @@
 from django.http import HttpResponse
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from users.models import identity_id
@@ -98,12 +99,19 @@ def submit(request):
 @api_view(["POST"])
 @permission_classes([IsAdminUser])
 def allocate(request):
+    if not request.user.has_perm("songs.change_competition"):
+        raise PermissionDenied("没有分配评分任务的权限")
     return Response(allocate_reviews(commit=request.data.get("commit") is True))
 
 
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
 def export(request):
+    if not any(
+        request.user.has_perm(permission)
+        for permission in ("songs.view_competition", "songs.change_competition")
+    ):
+        raise PermissionDenied("没有查看比赛成绩的权限")
     response = HttpResponse(
         export_peer_review_scores(),
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

@@ -6,6 +6,7 @@ from django.contrib.auth.models import Permission
 from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from PIL import Image
 from rest_framework.test import APIClient
 
 from songs.competitions import archive_competition, activate_competition
@@ -103,6 +104,56 @@ class BundleTests(TestCase):
                 self.assertEqual(bundle.read(name), data)
         response.close()
         self.net_upload.assert_not_called()
+
+    def test_single_bundle_normalizes_player_names_but_batch_keeps_originals(self):
+        cover = BytesIO()
+        Image.new("RGB", (2, 2)).save(cover, format="JPEG")
+        data = upload_files(
+            cover_image=SimpleUploadedFile("封面.JPEG", cover.getvalue(), "image/jpeg"),
+            background_video=SimpleUploadedFile("PV.MP4", b"video"),
+        )
+        data["chart_file"].name = "原稿.TXT"
+        data["audio_file"].name = "原曲.MP3"
+        expected = {}
+        for field in ("chart_file", "audio_file", "cover_image", "background_video"):
+            expected[data[field].name] = data[field].read()
+            data[field].seek(0)
+        response = self.api.post("/api/charts/", data, format="multipart")
+        self.assertEqual(response.status_code, 201, response.data)
+        chart = Chart.objects.get(pk=response.data["chart"]["id"])
+        single = self.api.get(f"/api/charts/{chart.pk}/bundle/")
+        with ZipFile(BytesIO(b"".join(single.streaming_content))) as bundle:
+            names = {
+                "原稿.TXT": "maidata.txt",
+                "原曲.MP3": "track.mp3",
+                "封面.JPEG": "bg.jpg",
+                "PV.MP4": "pv.mp4",
+            }
+            self.assertEqual(set(bundle.namelist()), set(names.values()))
+            for original, normalized in names.items():
+                self.assertEqual(bundle.read(normalized), expected[original])
+        single.close()
+        batch = self.download([chart.pk])
+        with ZipFile(BytesIO(b"".join(batch.streaming_content))) as bundle:
+            self.assertEqual(
+                set(bundle.namelist()),
+                {"谱面列表.txt"} | {f"{chart.guid}/{name}" for name in expected},
+            )
+        batch.close()
+
+    def test_webp_cover_uses_player_filename_without_reencoding(self):
+        cover = BytesIO()
+        Image.new("RGB", (2, 2)).save(cover, format="WEBP")
+        data = upload_files(
+            cover_image=SimpleUploadedFile("封面.webp", cover.getvalue(), "image/webp")
+        )
+        response = self.api.post("/api/charts/", data, format="multipart")
+        self.assertEqual(response.status_code, 201, response.data)
+        chart_id = response.data["chart"]["id"]
+        response = self.api.get(f"/api/charts/{chart_id}/bundle/")
+        with ZipFile(BytesIO(b"".join(response.streaming_content))) as bundle:
+            self.assertEqual(bundle.read("bg.png"), cover.getvalue())
+        response.close()
 
     def test_missing_resource_returns_error_instead_of_incomplete_zip(self):
         chart, _ = self.upload()
