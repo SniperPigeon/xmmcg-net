@@ -34,9 +34,7 @@
             show-password
             autocomplete="off"
         /></label>
-        <p>
-          联系方式使用大号的资料。一个大号可绑定多个小号。
-        </p>
+        <p>联系方式使用大号的资料。一个大号可绑定多个小号。</p>
       </template>
       <template v-else>
         <label

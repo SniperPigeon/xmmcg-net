@@ -4,12 +4,7 @@
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <el-skeleton v-if="loading" :rows="5" animated />
     <template v-else>
-      <el-alert
-        v-if="!canReview"
-        title="提交谱面后可参与评分"
-        type="info"
-        :closable="false"
-      />
+      <el-alert v-if="!canReview" title="提交谱面后可参与评分" type="info" :closable="false" />
       <el-alert
         v-else-if="!isOpen"
         title="评分尚未开放或已截止，已提交评分仍可查看"
