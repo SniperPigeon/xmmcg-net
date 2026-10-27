@@ -6,7 +6,7 @@
     <template v-else>
       <el-alert
         v-if="!canReview"
-        title="提交谱面后可参与评分，绑定账号的投稿也计入"
+        title="提交谱面后可参与评分"
         type="info"
         :closable="false"
       />
