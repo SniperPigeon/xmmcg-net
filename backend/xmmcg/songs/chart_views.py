@@ -8,14 +8,16 @@ from rest_framework.exceptions import ValidationError, PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from .majdata_service import sync_chart
-from .models import Chart, Competition
+from .models import Chart, Competition, CollaborationConsent
 from .phases import require_capability
 from .serializers import ChartSerializer, ChartUploadSerializer
 from .uploads import discard_new_assets, store_new_assets
 from .bundles import chart_bundle_response
+from .submissions import validate_authors, participation_charts, can_retry_sync
 
 
 def chart_list(queryset, request):
+    queryset = queryset.select_related("user").prefetch_related("contributors")
     try:
         page = max(1, int(request.query_params.get("page", 1)))
         size = min(100, max(1, int(request.query_params.get("page_size", 20))))
@@ -64,6 +66,8 @@ def charts_root(request):
         )
     serializer = ChartUploadSerializer(data=request.data, context={"request": request})
     serializer.is_valid(raise_exception=True)
+    collaborator_ids = serializer.validated_data.pop("collaborator_ids")
+    validate_authors(competition, request.user, collaborator_ids)
     chart = Chart(
         competition=competition,
         user=request.user,
@@ -73,9 +77,15 @@ def charts_root(request):
     try:
         store_new_assets(chart)
         with transaction.atomic():
-            require_capability("chart_upload", competition.pk)
+            competition = require_capability("chart_upload", competition.pk)
+            authors, consents = validate_authors(
+                competition, request.user, collaborator_ids
+            )
             chart.save()
-            chart.contributors.add(request.user)
+            chart.contributors.set(authors)
+            CollaborationConsent.objects.filter(
+                pk__in=[row.pk for row in consents]
+            ).update(used_by=chart)
     except Exception as error:
         discard_new_assets(chart)
         if isinstance(error, IntegrityError):
@@ -95,7 +105,7 @@ def charts_root(request):
 @permission_classes([IsAuthenticated])
 def my_charts(request):
     return chart_list(
-        Chart.objects.filter(user=request.user, competition=Competition.current()),
+        participation_charts(Competition.current(), [request.user.pk]),
         request,
     )
 
@@ -114,9 +124,7 @@ def retry_sync(request, chart_id):
     chart = get_object_or_404(
         Chart, pk=chart_id, competition=Competition.current(), status="submitted"
     )
-    if chart.user_id != request.user.pk and not (
-        request.user.is_staff and request.user.has_perm("songs.change_chart")
-    ):
+    if not can_retry_sync(request.user, chart):
         raise PermissionDenied("只能重试自己的投稿，或由有谱面修改权限的管理员操作")
     if chart.net_sync_status in ("unknown", "syncing"):
         raise ValidationError("请先由管理员核对 Net 上的上传结果")

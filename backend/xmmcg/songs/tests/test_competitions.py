@@ -222,7 +222,12 @@ class CompetitionAdminTests(TestCase):
         self.admin.save()
         self.client.force_login(self.admin)
         self.competition = Competition.objects.create(
-            name="后台测试", reviews_per_chart=2
+            name="后台测试",
+            reviews_per_chart=2,
+            max_chart_submissions=2,
+            submission_quota_scope="identity",
+            allow_collaboration=False,
+            require_collaborator_approval=False,
         )
 
     def url(self, action, competition=None):
@@ -263,6 +268,10 @@ class CompetitionAdminTests(TestCase):
                 "reviews_per_chart": 8,
                 "max_score": "50",
                 "max_favorites": 3,
+                "allow_collaboration": "on",
+                "require_collaborator_approval": "on",
+                "max_chart_submissions": 1,
+                "submission_quota_scope": "account",
                 "_save": "保存",
             },
         )
@@ -272,6 +281,17 @@ class CompetitionAdminTests(TestCase):
         new = Competition.objects.get(name="复制的新比赛")
         self.assertEqual(new.status, "draft")
         self.assertEqual(new.reviews_per_chart, 2)
+        self.assertEqual(
+            new.max_chart_submissions, self.competition.max_chart_submissions
+        )
+        self.assertEqual(
+            new.submission_quota_scope, self.competition.submission_quota_scope
+        )
+        self.assertEqual(new.allow_collaboration, self.competition.allow_collaboration)
+        self.assertEqual(
+            new.require_collaborator_approval,
+            self.competition.require_collaborator_approval,
+        )
         self.assertEqual(new.charts.count(), 0)
         self.assertEqual(new.songs.count(), 0)
         copied = new.phases.get()

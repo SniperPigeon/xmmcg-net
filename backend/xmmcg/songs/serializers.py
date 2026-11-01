@@ -5,6 +5,7 @@ from pathlib import PurePosixPath
 from django.conf import settings
 from rest_framework import serializers
 from .models import Announcement, Banner, Chart, CompetitionPhase, Song
+from .submissions import can_retry_sync
 
 
 def validate_asset(value, extensions, limit, label):
@@ -38,6 +39,12 @@ class AssetValidationMixin:
 
 class ChartUploadSerializer(AssetValidationMixin, serializers.ModelSerializer):
     submission_key = serializers.UUIDField(required=True)
+    collaborator_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        required=False,
+        default=list,
+        write_only=True,
+    )
 
     class Meta:
         model = Chart
@@ -49,6 +56,7 @@ class ChartUploadSerializer(AssetValidationMixin, serializers.ModelSerializer):
             "cover_image",
             "background_video",
             "submission_key",
+            "collaborator_ids",
         )
         extra_kwargs = {
             "title": {"required": False, "allow_blank": True},
@@ -89,6 +97,35 @@ class ChartUploadSerializer(AssetValidationMixin, serializers.ModelSerializer):
 
 
 class ChartSerializer(serializers.ModelSerializer):
+    is_collaboration = serializers.SerializerMethodField()
+    contributors = serializers.SerializerMethodField()
+    can_retry_sync = serializers.SerializerMethodField()
+
+    def get_is_collaboration(self, chart):
+        return any(user.pk != chart.user_id for user in chart.contributors.all())
+
+    def get_contributors(self, chart):
+        request = self.context.get("request")
+        user = request.user if request else None
+        authors = list(chart.contributors.all())
+        if not user or not user.is_authenticated:
+            return []
+        if user.pk not in {chart.user_id, *(author.pk for author in authors)} and not (
+            user.is_staff
+            and (
+                user.has_perm("songs.view_chart") or user.has_perm("songs.change_chart")
+            )
+        ):
+            return []
+        by_id = {chart.user_id: chart.user, **{author.pk: author for author in authors}}
+        return [
+            {"id": author.pk, "username": author.username} for author in by_id.values()
+        ]
+
+    def get_can_retry_sync(self, chart):
+        request = self.context.get("request")
+        return can_retry_sync(request.user if request else None, chart)
+
     chart_file_url = serializers.FileField(source="chart_file", read_only=True)
     audio_url = serializers.FileField(source="audio_file", read_only=True)
     cover_url = serializers.FileField(source="cover_image", read_only=True)
@@ -99,6 +136,9 @@ class ChartSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "guid",
+            "is_collaboration",
+            "contributors",
+            "can_retry_sync",
             "title",
             "designer",
             "status",

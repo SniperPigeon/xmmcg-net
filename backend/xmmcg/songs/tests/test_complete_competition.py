@@ -44,6 +44,10 @@ class CompleteCompetitionTests(TestCase):
             "reviews_per_chart": 3,
             "max_score": "50",
             "max_favorites": 2,
+            "allow_collaboration": "on",
+            "require_collaborator_approval": "on",
+            "max_chart_submissions": 1,
+            "submission_quota_scope": "account",
             "_continue": "保存并继续编辑",
         }
         if upload:

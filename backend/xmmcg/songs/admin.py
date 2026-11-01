@@ -11,6 +11,7 @@ from .models import (
     Announcement,
     Banner,
     Chart,
+    CollaborationConsent,
     CompetitionPhase,
     Competition,
     LegacyRecord,
@@ -401,3 +402,9 @@ class DrawAdmin(ReadOnlyAdmin):
 class DrawEntryAdmin(ReadOnlyAdmin):
     list_display = ("draw", "user", "song")
     list_filter = ("draw__phase__competition",)
+
+
+@admin.register(CollaborationConsent)
+class CollaborationConsentAdmin(ReadOnlyAdmin):
+    list_display = ("competition", "author", "uploader", "used_by", "created_at")
+    list_filter = ("competition",)
