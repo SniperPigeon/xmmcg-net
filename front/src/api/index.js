@@ -49,6 +49,14 @@ export const getAnnouncementsFromAPI = () => api.get('/contest/announcements/')
 export const getCharts = (params) => api.get('/charts/', { params })
 export const getMyCharts = (params) => api.get('/charts/me/', { params })
 export const submitChart = (data) => api.post('/charts/', data)
+export const getSubmissionStatus = () => api.get('/charts/submission-status/')
+export const searchCollaborationAccounts = (q, purpose) =>
+  api.get('/charts/collaboration-accounts/', { params: { q, purpose } })
+export const getCollaborationConsents = () => api.get('/charts/collaboration-consents/')
+export const grantCollaboration = (uploader_id) =>
+  api.post('/charts/collaboration-consents/', { uploader_id })
+export const revokeCollaboration = (id) => api.delete(`/charts/collaboration-consents/${id}/`)
+
 export const retryChartSync = (id) => api.post(`/charts/${id}/sync/`)
 export const getSongs = () => api.get('/songs/')
 export const uploadSong = (data) => api.post('/songs/', data)
