@@ -1,23 +1,61 @@
 <template>
-  <div class="eval-page">
-    <h2>评分任务</h2>
-    <el-alert v-if="error" :title="error" type="error" :closable="false" />
-    <el-skeleton v-if="loading" :rows="5" animated />
-    <template v-else>
-      <el-alert v-if="!canReview" title="提交谱面后可参与评分" type="info" :closable="false" />
-      <el-alert
-        v-else-if="!isOpen"
-        title="评分尚未开放或已截止，已提交评分仍可查看"
-        type="info"
-        :closable="false"
-      />
-      <p>满分 {{ config.max_score }} · 真爱票 {{ favoriteTotal }} / {{ config.max_favorites }}</p>
-      <el-button v-if="canReview && isOpen" @click="showExtra">添加额外谱面</el-button>
+  <div class="eval-page page-container">
+    <el-card shadow="hover" class="header-card">
+      <template #header>
+        <div class="card-header">
+          <el-icon><EditPen /></el-icon>
+          <span>评分任务</span>
+          <div class="header-actions">
+            <el-tag type="info" effect="plain">满分 {{ config.max_score }}</el-tag>
+            <el-tag type="danger" effect="plain">
+              真爱票 {{ favoriteTotal }} / {{ config.max_favorites }}
+            </el-tag>
+            <el-button
+              v-if="canReview && isOpen && !loading"
+              type="primary"
+              :icon="Plus"
+              @click="showExtra"
+              >添加额外谱面</el-button
+            >
+          </div>
+        </div>
+      </template>
+      <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
+      <el-skeleton v-if="loading" :rows="2" animated />
+      <template v-else>
+        <el-alert
+          v-if="!canReview"
+          title="提交谱面后可参与评分"
+          type="info"
+          :closable="false"
+          show-icon
+        />
+        <el-alert
+          v-else-if="!isOpen"
+          title="评分尚未开放或已截止，已提交评分仍可查看"
+          type="warning"
+          :closable="false"
+          show-icon
+        />
+        <el-alert
+          v-else
+          :title="`待提交 ${pending.length} 份，提交后不能修改`"
+          type="success"
+          :closable="false"
+          show-icon
+        />
+      </template>
+    </el-card>
+    <template v-if="!loading">
       <el-empty v-if="!tasks.length" description="暂无评分任务" />
-      <el-card v-for="(task, index) in tasks" :key="task.chart_id" class="task">
+      <el-card v-for="(task, index) in tasks" :key="task.chart_id" class="task" shadow="hover">
         <div class="heading">
-          <strong>{{ task.title }} · {{ task.designer }}</strong
-          ><el-tag>{{
+          <div class="task-title">
+            <el-icon><Document /></el-icon>
+            <strong>{{ task.title }}</strong>
+            <span class="designer">{{ task.designer }}</span>
+          </div>
+          <el-tag :type="task.completed ? 'success' : task.allocation_id ? 'primary' : 'warning'">{{
             task.completed ? '已提交' : task.allocation_id ? '分配任务' : '额外评分'
           }}</el-tag>
         </div>
@@ -45,7 +83,9 @@
             @click="tasks.splice(index, 1)"
             >移除</el-button
           >
-          <el-button link @click="download(task.chart_id)">下载谱面</el-button>
+          <el-button link type="primary" :icon="Download" @click="download(task.chart_id)"
+            >下载谱面</el-button
+          >
         </div>
         <el-input
           v-model="task.comment"
@@ -56,13 +96,11 @@
           :disabled="task.completed || !isOpen"
         />
       </el-card>
-      <el-button
-        v-if="canReview && isOpen && pending.length"
-        type="primary"
-        :loading="submitting"
-        @click="submit"
-        >提交评分（{{ pending.length }}）</el-button
-      >
+      <div v-if="canReview && isOpen && pending.length" class="submit-bar">
+        <el-button type="primary" size="large" :icon="Check" :loading="submitting" @click="submit"
+          >提交评分（{{ pending.length }}）</el-button
+        >
+      </div>
     </template>
     <el-dialog v-model="extraVisible" title="添加额外谱面" width="min(90vw, 600px)">
       <el-select v-model="selected" filterable placeholder="选择谱面" style="width: 100%"
@@ -82,6 +120,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { EditPen, Plus, Document, Download, Check } from '@element-plus/icons-vue'
 import { getMyReviewTasks, getReviewableCharts, submitReviews, downloadBundle } from '../api'
 const tasks = ref([]),
   loading = ref(true),
@@ -174,7 +213,6 @@ onMounted(load)
 <style scoped>
 .eval-page {
   max-width: 1000px;
-  margin: auto;
 }
 .task {
   margin: 16px 0;
@@ -189,5 +227,21 @@ onMounted(load)
 }
 .heading {
   justify-content: space-between;
+}
+.task-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  min-width: 0;
+}
+.task-title .designer {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.submit-bar {
+  display: flex;
+  justify-content: center;
+  margin: 20px 0;
 }
 </style>

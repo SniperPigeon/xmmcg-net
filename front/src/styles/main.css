@@ -590,3 +590,45 @@ h6,
     font-size: 15px;
   }
 }
+
+/* 页面通用排版：与 Element Plus 组件字号（14px）保持一致 */
+.page-container {
+  margin: 0 auto;
+  font-size: var(--el-font-size-base);
+  line-height: 1.6;
+}
+
+.page-container > .el-card + .el-card {
+  margin-top: 20px;
+}
+
+/* 卡片标题：图标 + 加粗标题 */
+.card-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.card-header .header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--el-font-size-base);
+  font-weight: normal;
+}
+
+.page-hint {
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.form-tip {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-top: 4px;
+}
