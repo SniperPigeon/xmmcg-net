@@ -111,6 +111,10 @@ const handleLogin = async () => {
   max-width: 400px;
 }
 
+.card-header {
+  justify-content: center;
+}
+
 .card-header h2 {
   margin: 0;
   text-align: center;
