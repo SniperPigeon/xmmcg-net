@@ -73,7 +73,15 @@ class UserDetailSerializer(serializers.ModelSerializer):
     preferred_name = serializers.CharField(source="profile.preferred_name", default="")
     main_account = serializers.SerializerMethodField()
     songsCount = serializers.IntegerField(source="songs.count", read_only=True)
-    chartsCount = serializers.IntegerField(source="charts.count", read_only=True)
+    chartsCount = serializers.SerializerMethodField()
+
+    def get_chartsCount(self, user):
+        from django.db.models import Q
+        from songs.models import Chart
+
+        return (
+            Chart.objects.filter(Q(user=user) | Q(contributors=user)).distinct().count()
+        )
 
     class Meta:
         model = User

@@ -3,9 +3,9 @@
 from django.utils import timezone
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from users.models import identity_id
 from .models import Announcement, Banner, Chart, CompetitionPhase, Competition
 from .phases import capabilities
+from .reviews import authors
 from .serializers import AnnouncementSerializer, BannerSerializer, PhaseSerializer
 
 
@@ -47,9 +47,11 @@ def get_status(request):
         or phases.filter(start_time__gt=now).order_by("start_time").first()
         or phases.order_by("-end_time").first()
     )
-    charts = Chart.objects.filter(
-        competition=config, status="submitted"
-    ).select_related("user__profile")
+    charts = (
+        Chart.objects.filter(competition=config, status="submitted")
+        .select_related("user__profile")
+        .prefetch_related("contributors__profile")
+    )
     return Response(
         {
             "competition": {"id": config.pk, "name": config.name} if config else None,
@@ -64,7 +66,9 @@ def get_status(request):
             }.get(phase.status, "")
             if phase
             else ("进行中" if config else "待开始"),
-            "participants": len({identity_id(chart.user) for chart in charts}),
+            "participants": len(
+                {person for chart in charts for person in authors(chart)}
+            ),
             "submissions": charts.count(),
             "submissionsLabel": "谱面数",
             "capabilities": capabilities(config),

@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, chart_views, song_views, review_views
+from . import views, chart_views, song_views, review_views, collaboration_views
 
 urlpatterns = [
     path("contest/status/", views.get_status),
@@ -8,6 +8,10 @@ urlpatterns = [
     path("contest/announcements/", views.get_announcements),
     path("charts/", chart_views.charts_root),
     path("charts/me/", chart_views.my_charts),
+    path("charts/submission-status/", collaboration_views.status),
+    path("charts/collaboration-accounts/", collaboration_views.accounts),
+    path("charts/collaboration-consents/", collaboration_views.consents),
+    path("charts/collaboration-consents/<int:consent_id>/", collaboration_views.revoke),
     path("charts/<int:chart_id>/", chart_views.chart_detail),
     path("charts/<int:chart_id>/bundle/", chart_views.download_bundle),
     path("charts/<int:chart_id>/sync/", chart_views.retry_sync),
