@@ -129,6 +129,26 @@ class Competition(models.Model):
         verbose_name="状态",
     )
     submissions_open = models.BooleanField(default=True, verbose_name="允许投稿")
+    allow_collaboration = models.BooleanField(default=True, verbose_name="允许合作谱面")
+    require_collaborator_approval = models.BooleanField(
+        default=True,
+        verbose_name="合作谱师需先授权",
+        help_text="合作谱师先授权上传者，上传者才能将其列为共同作者。",
+    )
+    max_chart_submissions = models.PositiveIntegerField(
+        default=1,
+        verbose_name="每个账号或身份最多参与谱面数",
+        help_text="独立投稿与合作投稿共同计数；0 表示不限。已提交的记录不会因调整上限而删除。",
+    )
+    submission_quota_scope = models.CharField(
+        max_length=16,
+        choices=[
+            ("account", "每个账号独立计算"),
+            ("identity", "大号与绑定小号合并计算"),
+        ],
+        default="account",
+        verbose_name="投稿名额计算方式",
+    )
     reviews_open = models.BooleanField(default=True, verbose_name="允许评分")
     reviews_per_chart = models.PositiveIntegerField(
         default=8, validators=[MinValueValidator(1)], verbose_name="每谱目标评分数"
@@ -354,7 +374,7 @@ class Chart(models.Model):
         verbose_name="用户",
         help_text="谱面创建者",
     )
-    # 保留历史共同作者用于排除本人评分，不恢复两阶段创作流程。
+    # 包括上传者在内的共同作者；同时用于投稿名额和本人评分排除。
     contributors = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         blank=True,
@@ -445,6 +465,50 @@ class Chart(models.Model):
 
     def __str__(self):
         return f"{self.title} — {self.designer}"
+
+
+class CollaborationConsent(models.Model):
+    competition = models.ForeignKey(
+        Competition, on_delete=models.PROTECT, verbose_name="比赛"
+    )
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="given_collaboration_consents",
+        verbose_name="合作谱师",
+    )
+    uploader = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="received_collaboration_consents",
+        verbose_name="授权上传者",
+    )
+    used_by = models.ForeignKey(
+        Chart,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="collaboration_consents",
+        verbose_name="已用于谱面",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="授权时间")
+
+    def __str__(self):
+        return f"{self.author} 授权 {self.uploader}"
+
+    class Meta:
+        verbose_name = verbose_name_plural = "合作投稿授权"
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(author=models.F("uploader")),
+                name="no_self_collaboration_consent",
+            ),
+            models.UniqueConstraint(
+                fields=["competition", "author", "uploader"],
+                condition=models.Q(used_by__isnull=True),
+                name="one_unused_collaboration_consent",
+            ),
+        ]
 
 
 class PeerReviewAllocation(models.Model):

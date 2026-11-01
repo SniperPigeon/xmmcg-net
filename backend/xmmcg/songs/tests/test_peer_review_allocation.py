@@ -18,7 +18,7 @@ def make_user(name, main=None):
 
 def make_competition():
     return Competition.current() or Competition.objects.create(
-        name="测试比赛", status="active"
+        name="测试比赛", status="active", max_chart_submissions=0
     )
 
 

@@ -9,6 +9,10 @@ from .models import Competition, CompetitionPhase
 
 CONFIG_FIELDS = (
     "submissions_open",
+    "allow_collaboration",
+    "require_collaborator_approval",
+    "max_chart_submissions",
+    "submission_quota_scope",
     "reviews_open",
     "reviews_per_chart",
     "max_score",
