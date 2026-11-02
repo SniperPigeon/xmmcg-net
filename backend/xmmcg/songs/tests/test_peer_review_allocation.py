@@ -1,6 +1,6 @@
 from decimal import Decimal
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 from rest_framework.exceptions import ValidationError
 from songs.models import Chart, Competition, PeerReview, PeerReviewAllocation
@@ -45,6 +45,28 @@ class ReviewTests(TestCase):
         result = allocate_reviews()
         self.assertEqual(result["new_tasks"], 12)
         self.assertFalse(PeerReviewAllocation.objects.exists())
+
+    @override_settings(PEER_REVIEW_TASKS_PER_USER=999, PEER_REVIEW_MAX_SCORE=999)
+    def test_competition_config_is_authoritative_over_legacy_settings(self):
+        self.config.reviews_per_chart = 1
+        self.config.max_score = 10
+        self.config.save()
+        result = allocate_reviews(commit=True)
+        self.assertEqual((result["target"], result["new_tasks"]), (1, 4))
+        self.assertTrue(
+            all(chart.review_allocations.count() == 1 for chart in self.charts)
+        )
+        with self.assertRaises(ValidationError):
+            submit_reviews(
+                self.users[0], [{"chart_id": self.charts[1].pk, "score": "10.25"}]
+            )
+        self.config.reviews_per_chart = 2
+        self.config.save()
+        updated = allocate_reviews(commit=True)
+        self.assertEqual((updated["target"], updated["new_tasks"]), (2, 4))
+        self.assertTrue(
+            all(chart.review_allocations.count() == 2 for chart in self.charts)
+        )
 
     def test_balanced_no_self_and_idempotent(self):
         result = allocate_reviews(commit=True)

@@ -4,11 +4,53 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.core.management import call_command
 from django.core.exceptions import ImproperlyConfigured
 from songs.majdata_service import upload_chart
-from xmmcg.storage import cors_policy, R2Storage
+from xmmcg.storage import cors_policy, R2Storage, r2_storage_options
 from .test_peer_review_allocation import make_user, make_chart
 
 
 class StorageConfigurationTests(SimpleTestCase):
+    def storage_options(self, **extra):
+        values = {
+            "R2_ACCESS_KEY_ID": "example",
+            "R2_SECRET_ACCESS_KEY": "example-secret",
+            "R2_BUCKET_NAME": "test-bucket",
+            **extra,
+        }
+
+        def config(key, default=None, cast=None):
+            value = values.get(key, default)
+            return cast(value) if cast else value
+
+        return r2_storage_options(config, "media")
+
+    def test_account_id_generates_endpoint_when_explicit_endpoint_is_empty(self):
+        options = self.storage_options(
+            R2_ACCOUNT_ID="example-account", R2_ENDPOINT_URL=""
+        )
+        self.assertEqual(
+            R2Storage(**options).endpoint_url,
+            "https://example-account.r2.cloudflarestorage.com",
+        )
+
+    def test_explicit_endpoint_takes_precedence_and_can_replace_account_id(self):
+        endpoint = "https://example-account.eu.r2.cloudflarestorage.com"
+        for account in ("", "unused-account"):
+            with self.subTest(account=account):
+                self.assertEqual(
+                    R2Storage(
+                        **self.storage_options(
+                            R2_ACCOUNT_ID=account, R2_ENDPOINT_URL=endpoint
+                        )
+                    ).endpoint_url,
+                    endpoint,
+                )
+
+    def test_credentials_and_bucket_alone_are_not_enough(self):
+        with self.assertRaisesMessage(
+            ImproperlyConfigured, "R2_ACCOUNT_ID 或 R2_ENDPOINT_URL"
+        ):
+            R2Storage(**self.storage_options())
+
     def test_private_signed_url_and_no_path(self):
         storage = R2Storage(
             access_key="example",

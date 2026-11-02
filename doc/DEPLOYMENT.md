@@ -6,6 +6,8 @@
 
 后端 Python 3.12+，建议使用 3.13；前端构建支持 Node.js 22.12+。通过 `requirements.lock` 与 `package-lock.json` 固定已验证版本。
 
+评分任务数量、满分和真爱票上限统一读取后台「比赛」的配置。旧 `PEER_REVIEW_TASKS_PER_USER`、`PEER_REVIEW_MAX_SCORE` 环境变量已不再使用，可从旧配置文件中删除；删除它们不会更改已保存的比赛配置或评分。后台的「每谱目标评分数」表示每张谱面的目标评分人数，分配器再根据可评作品和作者排除规则平衡各人的任务量，不保证每人任务数都等于该值。
+
 ## R2
 
 1. 创建专用于网站资源的桶，为后端生成仅访问该桶的 S3 凭证。
@@ -15,6 +17,8 @@
 5. `collectstatic --noinput` 将 Django Admin 静态文件上传到 `static/`；业务素材写入 `media/`。无需 Nginx `/media` 或本地 `MEDIA_ROOT`。私有桶模式下，管理后台静态文件经 `/static/` 从 R2 读取并返回，确保 CSS 相对资源和 JavaScript 模块可以正常加载；该接口固定使用 `static/` 前缀，不能读取业务素材。
 
 实际链路：浏览器 → 登录及 CSRF 验证后的 Django 投稿 API → R2 → Django 读取存储流 → Net。
+
+`R2_ENDPOINT_URL` 留空且已有 `R2_ACCOUNT_ID` 时，自动使用 `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`。只填写 Access Key ID、Secret Access Key 和桶名还不够：还需 Account ID 或完整 Endpoint 之一。`R2_PUBLIC_DOMAIN` 是可选的公开读取域名，不能替代后端 S3 Endpoint。
 
 Net 登录/上传地址、账号和哈希密码通过 `MAJDATA_*` 配置。投稿保留独立同步状态：失败可以重试；超时或无法确认响应会标记为 `unknown`，避免盲目重复上传。成功后的远端 URL 和响应被保存。`unknown` 或进程中断遗留的 `syncing` 状态由管理员先到 Net 核对，再运行 `resolve_net_sync` 标记已完成或允许重试。没有自动清除远端作品的操作。
 
