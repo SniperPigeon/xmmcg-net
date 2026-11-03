@@ -276,3 +276,36 @@ class CollaborationTests(TestCase):
         chart.contributors.add(self.bob)
         self.assertEqual(self.quota(self.bob)["used"], 1)
         self.assertEqual(self.upload(self.bob).status_code, 400)
+
+    def test_profile_counts_legacy_completed_works_without_first_stage_fragments(self):
+        history = Competition.objects.create(name="历史比赛", status="archived")
+        fragment = make_chart(self.alice, "first song", competition=history)
+        fragment.status = "archived"
+        fragment.legacy_metadata = {"is_part_one": True, "status": "part_submitted"}
+        fragment.save()
+        completed = make_chart(self.bob, "first song", competition=history)
+        completed.legacy_metadata = {
+            "is_part_one": False,
+            "part_one_chart_id": fragment.pk,
+        }
+        completed.save()
+        completed.contributors.add(self.alice)
+        second = make_chart(self.alice, "second song", competition=history)
+        second.legacy_metadata = {"is_part_one": False}
+        second.save()
+        second.contributors.add(self.carol)
+
+        response = self.client_for(self.alice).get("/api/users/me/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["chartsCount"], 2)
+        self.assertTrue(Chart.objects.filter(pk=fragment.pk).exists())
+
+        # New-format works have no legacy flag. Archived complete works still
+        # belong in the lifetime count, and uploader/contributor joins dedupe.
+        modern = make_chart(self.alice, competition=self.competition)
+        modern.status = "archived"
+        modern.save()
+        modern.contributors.add(self.bob, self.carol)
+        self.assertEqual(
+            self.client_for(self.alice).get("/api/users/me/").data["chartsCount"], 3
+        )

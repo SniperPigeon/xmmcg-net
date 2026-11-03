@@ -79,8 +79,14 @@ class UserDetailSerializer(serializers.ModelSerializer):
         from django.db.models import Q
         from songs.models import Chart
 
+        # Legacy first-stage fragments are preserved for history, but their
+        # completed collaborations already count as works by the same authors.
+        fragments = Chart.objects.filter(legacy_metadata__is_part_one=True)
         return (
-            Chart.objects.filter(Q(user=user) | Q(contributors=user)).distinct().count()
+            Chart.objects.filter(Q(user=user) | Q(contributors=user))
+            .exclude(pk__in=fragments.values("pk"))
+            .distinct()
+            .count()
         )
 
     class Meta:
