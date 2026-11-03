@@ -6,7 +6,7 @@
     mode="horizontal"
     :ellipsis="false"
     class="navbar"
-    aria-label="主导航"
+    :aria-label="t('mainNavigation')"
     @select="handleSelect"
   >
     <div class="logo" @click="router.push('/')">
@@ -21,9 +21,14 @@
 
     <div class="flex-grow" />
 
+    <LanguageSwitcher />
     <div v-if="!currentUser" class="auth-buttons">
-      <el-button type="primary" size="small" @click="router.push('/login')">登录</el-button>
-      <el-button type="success" size="small" @click="router.push('/register')">注册</el-button>
+      <el-button type="primary" size="small" @click="router.push('/login')">{{
+        t('logIn')
+      }}</el-button>
+      <el-button type="success" size="small" @click="router.push('/register')">{{
+        t('register')
+      }}</el-button>
     </div>
 
     <el-sub-menu v-else index="user" class="user-menu">
@@ -32,13 +37,11 @@
         <span>{{ currentUser.username }}</span>
       </template>
       <el-menu-item index="/profile">
-        <el-icon><User /></el-icon>
-        个人中心
-      </el-menu-item>
+        <el-icon><User /></el-icon>{{ t('profile') }}</el-menu-item
+      >
       <el-menu-item index="logout">
-        <el-icon><SwitchButton /></el-icon>
-        退出登录
-      </el-menu-item>
+        <el-icon><SwitchButton /></el-icon>{{ t('logOut') }}</el-menu-item
+      >
     </el-sub-menu>
   </el-menu>
 
@@ -50,14 +53,30 @@
       </div>
 
       <div class="mobile-actions">
+        <LanguageSwitcher />
         <template v-if="!currentUser">
-          <el-button type="primary" size="small" @click="router.push('/login')">登录</el-button>
-          <el-button type="success" size="small" @click="router.push('/register')">注册</el-button>
+          <el-button type="primary" size="small" @click="router.push('/login')">{{
+            t('logIn')
+          }}</el-button>
+          <el-button type="success" size="small" @click="router.push('/register')">{{
+            t('register')
+          }}</el-button>
         </template>
-        <el-button v-else circle size="small" aria-label="用户菜单" @click="showMobileMenu = true">
+        <el-button
+          v-else
+          circle
+          size="small"
+          :aria-label="t('userMenu')"
+          @click="showMobileMenu = true"
+        >
           <el-icon><UserFilled /></el-icon>
         </el-button>
-        <el-button circle size="small" aria-label="打开菜单" @click="mobileDrawerVisible = true">
+        <el-button
+          circle
+          size="small"
+          :aria-label="t('openMenu')"
+          @click="mobileDrawerVisible = true"
+        >
           <el-icon><Menu /></el-icon>
         </el-button>
       </div>
@@ -75,7 +94,7 @@
       <template #header>
         <div class="drawer-header">
           <el-icon :size="24"><Trophy /></el-icon>
-          <span>菜单</span>
+          <span>{{ t('menu') }}</span>
         </div>
       </template>
 
@@ -90,21 +109,21 @@
         <template v-if="currentUser">
           <el-menu-item index="/profile">
             <el-icon><User /></el-icon>
-            <span>个人中心</span>
+            <span>{{ t('profile') }}</span>
           </el-menu-item>
           <el-menu-item index="logout">
             <el-icon><SwitchButton /></el-icon>
-            <span>退出登录</span>
+            <span>{{ t('logOut') }}</span>
           </el-menu-item>
         </template>
         <template v-else>
           <el-menu-item index="/login">
             <el-icon><User /></el-icon>
-            <span>登录</span>
+            <span>{{ t('logIn') }}</span>
           </el-menu-item>
           <el-menu-item index="/register">
             <el-icon><UserFilled /></el-icon>
-            <span>注册</span>
+            <span>{{ t('register') }}</span>
           </el-menu-item>
         </template>
       </el-menu>
@@ -126,19 +145,21 @@
       </template>
       <div class="mobile-user-actions">
         <el-button type="primary" @click="handleMobileSelect('/profile')">
-          <el-icon><User /></el-icon>
-          个人中心
-        </el-button>
+          <el-icon><User /></el-icon>{{ t('profile') }}</el-button
+        >
         <el-button type="danger" @click="handleMobileSelect('logout')">
-          <el-icon><SwitchButton /></el-icon>
-          退出登录
-        </el-button>
+          <el-icon><SwitchButton /></el-icon>{{ t('logOut') }}</el-button
+        >
       </div>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
+import LanguageSwitcher from './LanguageSwitcher.vue'
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
+
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -166,10 +187,10 @@ let timer
 
 const navItems = computed(() =>
   [
-    { path: '/', label: '首页', icon: HomeFilled },
-    { path: '/charts', label: '谱面投稿', icon: Document },
-    songsEnabled.value && { path: '/songs', label: '歌曲抽选', icon: Headset },
-    { path: '/eval', label: '评分', icon: Star },
+    { path: '/', label: t('home'), icon: HomeFilled },
+    { path: '/charts', label: t('submitCharts'), icon: Document },
+    songsEnabled.value && { path: '/songs', label: t('songDraw'), icon: Headset },
+    { path: '/eval', label: t('review'), icon: Star },
   ].filter(Boolean),
 )
 const activeIndex = computed(() => route.path)
@@ -189,7 +210,7 @@ const refresh = async () => {
 const signOut = async () => {
   try {
     await endSession()
-    ElMessage.success('已退出登录')
+    ElMessage.success(t('loggedOut'))
     router.push('/')
   } catch (error) {
     ElMessage.error(error.message)

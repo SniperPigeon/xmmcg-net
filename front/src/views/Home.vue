@@ -12,34 +12,42 @@
               <el-icon>
                 <TrophyBase />
               </el-icon>
-              <span>当前比赛状态</span>
+              <span>{{ t('currentCompetitionStatus') }}</span>
             </div>
           </template>
           <el-row :gutter="20">
             <el-col :xs="24" :sm="12" :md="6">
               <div class="status-item">
-                <div class="status-label">比赛状态</div>
-                <div class="status-value">{{ competitionStatus.currentRound || '未开始' }}</div>
+                <div class="status-label">{{ t('competitionStatus') }}</div>
+                <div class="status-value">
+                  {{
+                    competitionStatus.competition ? competitionStatus.currentRound : t('notStarted')
+                  }}
+                </div>
               </div>
             </el-col>
             <el-col :xs="24" :sm="12" :md="6">
               <div class="status-item">
-                <div class="status-label">状态</div>
+                <div class="status-label">{{ t('status') }}</div>
                 <el-tag :type="getStatusType(competitionStatus.status)">
-                  {{ competitionStatus.statusText || '待定' }}
+                  {{
+                    { active: t('inProgress'), upcoming: t('upcoming'), ended: t('ended') }[
+                      competitionStatus.status
+                    ] || t('toBeDetermined')
+                  }}
                 </el-tag>
               </div>
             </el-col>
             <el-col :xs="24" :sm="12" :md="6">
               <div class="status-item">
-                <div class="status-label">参赛人数</div>
+                <div class="status-label">{{ t('participants') }}</div>
                 <div class="status-value">{{ competitionStatus.participants || 0 }}</div>
               </div>
             </el-col>
             <el-col :xs="24" :sm="12" :md="6">
               <div class="status-item">
                 <div class="status-label">
-                  {{ competitionStatus.submissionsLabel || '提交作品数' }}
+                  {{ t('submittedCharts') }}
                 </div>
                 <div class="status-value">{{ competitionStatus.submissions || 0 }}</div>
               </div>
@@ -61,9 +69,11 @@
                 <el-icon size="48" color="#409EFF">
                   <Headset />
                 </el-icon>
-                <h3>歌曲抽选</h3>
-                <p>可选的歌曲上传与随机抽选</p>
-                <el-button type="primary" @click="$router.push('/songs')"> 前往歌曲页 </el-button>
+                <h3>{{ t('songDraw') }}</h3>
+                <p>{{ t('optionalSongUploadsAndRandomDraws') }}</p>
+                <el-button type="primary" @click="$router.push('/songs')">{{
+                  t('goToSongs')
+                }}</el-button>
               </div>
             </el-card>
           </el-col>
@@ -73,9 +83,11 @@
                 <el-icon size="48" color="#67C23A">
                   <Document />
                 </el-icon>
-                <h3>查看谱面</h3>
-                <p>浏览所有提交的谱面作品</p>
-                <el-button type="success" @click="$router.push('/charts')"> 前往谱面页 </el-button>
+                <h3>{{ t('browseCharts') }}</h3>
+                <p>{{ t('browseAllSubmittedCharts') }}</p>
+                <el-button type="success" @click="$router.push('/charts')">{{
+                  t('goToCharts')
+                }}</el-button>
               </div>
             </el-card>
           </el-col>
@@ -85,9 +97,9 @@
                 <el-icon size="48" color="#E6A23C">
                   <User />
                 </el-icon>
-                <h3>个人中心</h3>
-                <p>管理您的账号与作品</p>
-                <el-button type="warning" @click="goToProfile"> 前往个人中心 </el-button>
+                <h3>{{ t('profile') }}</h3>
+                <p>{{ t('manageYourAccountAndCharts') }}</p>
+                <el-button type="warning" @click="goToProfile">{{ t('goToProfile') }}</el-button>
               </div>
             </el-card>
           </el-col>
@@ -98,6 +110,9 @@
 </template>
 
 <script setup>
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
+
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { TrophyBase, Headset, Document, User } from '@element-plus/icons-vue'

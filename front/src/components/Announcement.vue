@@ -3,7 +3,7 @@
     <template #header>
       <div class="card-header">
         <el-icon><BellFilled /></el-icon>
-        <span>最新公告</span>
+        <span>{{ t('latestAnnouncements') }}</span>
       </div>
     </template>
 
@@ -18,7 +18,9 @@
         <el-card :body-style="{ padding: '15px' }">
           <div class="announcement-header">
             <h4>{{ announcement.title }}</h4>
-            <el-tag v-if="announcement.is_pinned" type="danger" size="small">置顶</el-tag>
+            <el-tag v-if="announcement.is_pinned" type="danger" size="small">{{
+              t('pinned')
+            }}</el-tag>
             <el-tag :type="getCategoryTagType(announcement.category)" size="small">
               {{ getCategoryLabel(announcement.category) }}
             </el-tag>
@@ -28,11 +30,14 @@
       </el-timeline-item>
     </el-timeline>
 
-    <el-empty v-if="announcements.length === 0" description="暂无公告" />
+    <el-empty v-if="announcements.length === 0" :description="t('noAnnouncementsYet')" />
   </el-card>
 </template>
 
 <script setup>
+import { useI18n } from 'vue-i18n'
+const { t, locale } = useI18n()
+
 import { ref, onMounted } from 'vue'
 import { BellFilled } from '@element-plus/icons-vue'
 import { getAnnouncementsFromAPI } from '../api'
@@ -61,9 +66,9 @@ const getCategoryTagType = (category) => {
 
 const getCategoryLabel = (category) => {
   const labelMap = {
-    news: '新闻',
-    event: '活动',
-    notice: '通知',
+    news: t('news'),
+    event: t('events'),
+    notice: t('notices'),
   }
   return labelMap[category] || category
 }
@@ -72,7 +77,7 @@ const formatTime = (dateString) => {
   if (!dateString) return ''
   try {
     const date = new Date(dateString)
-    return date.toLocaleDateString('zh-CN', {
+    return date.toLocaleDateString(locale.value, {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',

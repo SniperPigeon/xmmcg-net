@@ -38,6 +38,7 @@ jobs:
           cache-dependency-path: front/package-lock.json
       - run: npm ci
       - run: npm run format:check
+      - run: npm run check:i18n
       - run: npm run build
 
   deployment_checks:

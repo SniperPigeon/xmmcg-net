@@ -4,18 +4,25 @@
       <template #header>
         <div class="card-header">
           <el-icon><EditPen /></el-icon>
-          <span>评分任务</span>
+          <span>{{ t('reviewTasks') }}</span>
           <div class="header-actions">
-            <el-tag type="info" effect="plain">满分 {{ config.max_score }}</el-tag>
-            <el-tag type="danger" effect="plain">
-              真爱票 {{ favoriteTotal }} / {{ config.max_favorites }}
+            <el-tag type="info" effect="plain">{{
+              t('maximumScoreValue', { value0: config.max_score })
+            }}</el-tag>
+            <el-tag type="danger" effect="plain"
+              >{{
+                t('favoriteVotesValueValue', {
+                  value0: favoriteTotal,
+                  value1: config.max_favorites,
+                })
+              }}
             </el-tag>
             <el-button
               v-if="canReview && isOpen && !loading"
               type="primary"
               :icon="Plus"
               @click="showExtra"
-              >添加额外谱面</el-button
+              >{{ t('addExtraCharts') }}</el-button
             >
           </div>
         </div>
@@ -25,21 +32,21 @@
       <template v-else>
         <el-alert
           v-if="!canReview"
-          title="提交谱面后可参与评分"
+          :title="t('submitAChartToParticipateInReviews')"
           type="info"
           :closable="false"
           show-icon
         />
         <el-alert
           v-else-if="!isOpen"
-          title="评分尚未开放或已截止，已提交评分仍可查看"
+          :title="t('reviewsHaveNotOpenedOrHaveClosedSubmitted')"
           type="warning"
           :closable="false"
           show-icon
         />
         <el-alert
           v-else
-          :title="`待提交 ${pending.length} 份，提交后不能修改`"
+          :title="t('valueReviewsPendingSubmissionsCannotBeChanged', { value0: pending.length })"
           type="success"
           :closable="false"
           show-icon
@@ -47,7 +54,7 @@
       </template>
     </el-card>
     <template v-if="!loading">
-      <el-empty v-if="!tasks.length" description="暂无评分任务" />
+      <el-empty v-if="!tasks.length" :description="t('noReviewTasksYet')" />
       <el-card v-for="(task, index) in tasks" :key="task.chart_id" class="task" shadow="hover">
         <div class="heading">
           <div class="task-title">
@@ -56,7 +63,11 @@
             <span class="designer">{{ task.designer }}</span>
           </div>
           <el-tag :type="task.completed ? 'success' : task.allocation_id ? 'primary' : 'warning'">{{
-            task.completed ? '已提交' : task.allocation_id ? '分配任务' : '额外评分'
+            task.completed
+              ? t('submitted')
+              : task.allocation_id
+                ? t('assignedTask')
+                : t('extraReview')
           }}</el-tag>
         </div>
         <div class="score-row">
@@ -67,43 +78,48 @@
             :precision="2"
             :step="0.25"
             :disabled="task.completed || !isOpen"
-            aria-label="评分"
+            :aria-label="t('review')"
           />
           <el-checkbox
             v-model="task.favorite"
             :disabled="
               task.completed || !isOpen || (!task.favorite && favoriteTotal >= config.max_favorites)
             "
-            >真爱票</el-checkbox
+            >{{ t('favoriteVote') }}</el-checkbox
           >
           <el-button
             v-if="!task.completed && !task.allocation_id"
             type="danger"
             link
             @click="tasks.splice(index, 1)"
-            >移除</el-button
+            >{{ t('remove') }}</el-button
           >
-          <el-button link type="primary" :icon="Download" @click="download(task.chart_id)"
-            >下载谱面</el-button
-          >
+          <el-button link type="primary" :icon="Download" @click="download(task.chart_id)">{{
+            t('downloadChart')
+          }}</el-button>
         </div>
         <el-input
           v-model="task.comment"
           type="textarea"
           :rows="2"
           maxlength="20000"
-          placeholder="评语（可选）"
+          :placeholder="t('commentOptional')"
           :disabled="task.completed || !isOpen"
         />
       </el-card>
       <div v-if="canReview && isOpen && pending.length" class="submit-bar">
-        <el-button type="primary" size="large" :icon="Check" :loading="submitting" @click="submit"
-          >提交评分（{{ pending.length }}）</el-button
+        <el-button
+          type="primary"
+          size="large"
+          :icon="Check"
+          :loading="submitting"
+          @click="submit"
+          >{{ t('submitReviewsValue', { value0: pending.length }) }}</el-button
         >
       </div>
     </template>
-    <el-dialog v-model="extraVisible" title="添加额外谱面" width="min(90vw, 600px)">
-      <el-select v-model="selected" filterable placeholder="选择谱面" style="width: 100%"
+    <el-dialog v-model="extraVisible" :title="t('addExtraCharts')" width="min(90vw, 600px)">
+      <el-select v-model="selected" filterable :placeholder="t('chooseChart')" style="width: 100%"
         ><el-option
           v-for="chart in available"
           :key="chart.id"
@@ -111,13 +127,16 @@
           :label="`${chart.title} · ${chart.designer}`"
       /></el-select>
       <template #footer
-        ><el-button @click="extraVisible = false">取消</el-button
-        ><el-button type="primary" @click="addExtra">添加</el-button></template
+        ><el-button @click="extraVisible = false">{{ t('cancel') }}</el-button
+        ><el-button type="primary" @click="addExtra">{{ t('add') }}</el-button></template
       >
     </el-dialog>
   </div>
 </template>
 <script setup>
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
+
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { EditPen, Plus, Document, Download, Check } from '@element-plus/icons-vue'
@@ -179,11 +198,15 @@ const addExtra = () => {
 }
 const submit = async () => {
   if (pending.value.some((task) => task.score === undefined || task.score === null)) {
-    ElMessage.warning('请填写全部待提交任务的分数')
+    ElMessage.warning(t('pleaseScoreEveryPendingReviewTask'))
     return
   }
   try {
-    await ElMessageBox.confirm(`提交 ${pending.value.length} 份评分？提交后不能修改。`, '确认提交')
+    await ElMessageBox.confirm(
+      t('submitValueReviewsSubmissionsCannotBeChanged', { value0: pending.value.length }),
+      t('confirmSubmission'),
+      { confirmButtonText: t('confirmSubmission'), cancelButtonText: t('cancel') },
+    )
     submitting.value = true
     await submitReviews(
       pending.value.map(({ chart_id, score, comment, favorite }) => ({
@@ -193,7 +216,7 @@ const submit = async () => {
         favorite,
       })),
     )
-    ElMessage.success('评分已保存')
+    ElMessage.success(t('reviewsSaved'))
     await load()
   } catch (err) {
     if (err !== 'cancel' && err !== 'close') ElMessage.error(err.message)

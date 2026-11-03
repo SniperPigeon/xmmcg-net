@@ -16,7 +16,7 @@
           <h2>{{ item.title }}</h2>
           <p>{{ item.content }}</p>
           <el-button v-if="item.link" type="primary" size="large" @click="handleClick(item.link)">
-            {{ item.button_text || '了解更多' }}
+            {{ item.button_text || t('learnMore') }}
           </el-button>
         </div>
       </div>
@@ -25,6 +25,9 @@
 </template>
 
 <script setup>
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
+
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getBanners } from '../api'

@@ -5,35 +5,43 @@
       <template #header>
         <div class="card-header">
           <el-icon><Upload /></el-icon>
-          <span>谱面投稿</span>
+          <span>{{ t('submitCharts') }}</span>
         </div>
       </template>
-      <p class="page-hint">上传完整谱面及配套素材。可自由选曲。</p>
+      <p class="page-hint">{{ t('uploadACompleteChartWithItsAssetsYou') }}</p>
       <el-alert
         v-if="!currentUser"
-        title="登录后即可投稿"
+        :title="t('logInToSubmitAChart')"
         type="info"
         :closable="false"
         show-icon
       />
       <el-alert
         v-else-if="!canUpload"
-        title="投稿尚未开放或已截止"
+        :title="t('submissionsHaveNotOpenedOrHaveClosed')"
         type="warning"
         :closable="false"
         show-icon
       />
       <template v-else>
         <p v-if="submissionStatus?.competition_id" class="quota-text">
-          <el-icon><InfoFilled /></el-icon>
-          本届{{ submissionStatus.scope === 'identity' ? '大号与绑定小号合计' : '每个账号' }}
-          {{
-            submissionStatus.limit ? `最多参与 ${submissionStatus.limit} 张谱面` : '不限投稿数量'
-          }}，已参与 {{ submissionStatus.used }} 张（含合作投稿）。
+          <el-icon><InfoFilled /></el-icon
+          >{{
+            t('thisRoundValueValueAlreadyParticipatingInValue', {
+              value0:
+                submissionStatus.scope === 'identity'
+                  ? t('theMainAccountAndAllLinkedAccountsCombined')
+                  : t('eachAccount'),
+              value1: submissionStatus.limit
+                ? t('upToValueCharts', { value0: submissionStatus.limit })
+                : t('unlimitedSubmissions'),
+              value2: submissionStatus.used,
+            })
+          }}
         </p>
         <el-alert
           v-if="submissionStatus && !submissionStatus.can_upload"
-          title="本届投稿名额已用完（包含被绑定的合作谱面）"
+          :title="t('yourSubmissionQuotaForThisRoundIsExhausted')"
           type="warning"
           :closable="false"
           show-icon
@@ -48,13 +56,21 @@
         :disabled="uploading"
         @submit.prevent="upload"
       >
-        <el-form-item label="标题">
-          <el-input v-model="form.title" maxlength="200" placeholder="留空则从谱面读取" />
+        <el-form-item :label="t('title')">
+          <el-input
+            v-model="form.title"
+            maxlength="200"
+            :placeholder="t('leaveBlankToReadFromTheChart')"
+          />
         </el-form-item>
-        <el-form-item label="谱师名义">
-          <el-input v-model="form.designer" maxlength="100" placeholder="留空则从谱面读取" />
+        <el-form-item :label="t('chartDesigner')">
+          <el-input
+            v-model="form.designer"
+            maxlength="100"
+            :placeholder="t('leaveBlankToReadFromTheChart')"
+          />
         </el-form-item>
-        <el-form-item v-if="submissionStatus.allow_collaboration" label="合作谱师">
+        <el-form-item v-if="submissionStatus.allow_collaboration" :label="t('collaborators')">
           <el-select
             v-model="collaboratorIds"
             multiple
@@ -66,8 +82,8 @@
             :loading="searching.collaborator"
             :placeholder="
               submissionStatus.require_collaborator_approval
-                ? '可选，选择已授权你的合作谱师'
-                : '可选，输入至少两个字符搜索用户名'
+                ? t('optionalSelectCollaboratorsWhoHaveAuthorizedYou')
+                : t('optionalEnterAtLeastTwoCharactersToSearch')
             "
             @visible-change="(visible) => visible && searchAccounts('collaborator', '')"
           >
@@ -75,14 +91,15 @@
               v-for="account in accountOptions.collaborator"
               :key="account.id"
               :value="account.id"
-              :label="account.username + (account.available ? '' : '（名额已用完）')"
+              :label="account.username + (account.available ? '' : t('quotaExhausted'))"
               :disabled="!account.available"
             />
           </el-select>
           <div class="form-tip">
-            <template v-if="submissionStatus.require_collaborator_approval"
-              >合作谱师需先在本页授权你的账号，才会出现在列表中。</template
-            >提交成功后，本人和合作谱师都计入投稿名额。
+            <template v-if="submissionStatus.require_collaborator_approval">{{
+              t('collaboratorsMustAuthorizeYourAccountOnThisPage')
+            }}</template
+            >{{ t('aSuccessfulSubmissionCountsTowardBothYourQuota') }}
           </div>
         </el-form-item>
         <el-form-item v-for="field in fileFields" :key="field.name" :required="field.required">
@@ -106,9 +123,9 @@
           </el-upload>
         </el-form-item>
         <el-form-item>
-          <el-button native-type="submit" type="primary" :icon="Upload" :loading="uploading">
-            提交完整谱面
-          </el-button>
+          <el-button native-type="submit" type="primary" :icon="Upload" :loading="uploading">{{
+            t('submitCompleteChart')
+          }}</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -125,19 +142,17 @@
       <template #header>
         <div class="card-header">
           <el-icon><Connection /></el-icon>
-          <span>授权合作投稿</span>
+          <span>{{ t('authorizeCollaboration') }}</span>
         </div>
       </template>
-      <p class="page-hint">
-        由对方上传合作谱面时，先选择对方的账号并授权。只有成功投稿才会占用你的名额。
-      </p>
+      <p class="page-hint">{{ t('ifSomeoneElseWillUploadYourCollaborationSelect') }}</p>
       <div v-if="canUpload && submissionStatus.can_upload" class="consent-form">
         <el-select
           v-model="uploaderId"
           filterable
           remote
           clearable
-          placeholder="输入至少两个字符搜索上传者"
+          :placeholder="t('enterAtLeastTwoCharactersToSearchUploaders')"
           :remote-method="(query) => searchAccounts('uploader', query)"
           :loading="searching.uploader"
         >
@@ -145,20 +160,20 @@
             v-for="account in accountOptions.uploader"
             :key="account.id"
             :value="account.id"
-            :label="account.username + (account.available ? '' : '（名额已用完）')"
+            :label="account.username + (account.available ? '' : t('quotaExhausted'))"
             :disabled="!account.available"
           />
         </el-select>
-        <el-button type="primary" :disabled="!uploaderId" :loading="granting" @click="grant"
-          >授权对方上传一张合作谱面</el-button
-        >
+        <el-button type="primary" :disabled="!uploaderId" :loading="granting" @click="grant">{{
+          t('authorizeOneCollaborationUpload')
+        }}</el-button>
       </div>
-      <el-empty v-if="!consents.length" description="暂无授权" :image-size="60" />
+      <el-empty v-if="!consents.length" :description="t('noAuthorizationsYet')" :image-size="60" />
       <div v-for="consent in consents" :key="consent.id" class="consent-row">
         <el-icon><User /></el-icon>
         <span class="consent-name">{{ consent.uploader.username }}</span>
         <el-tag :type="consent.used ? 'success' : 'info'" size="small">{{
-          consent.used ? '已用于投稿' : '待对方投稿'
+          consent.used ? t('usedForASubmission') : t('awaitingSubmission')
         }}</el-tag>
         <el-button
           v-if="!consent.used"
@@ -166,7 +181,7 @@
           type="danger"
           :loading="revoking === consent.id"
           @click="revoke(consent)"
-          >撤销授权</el-button
+          >{{ t('revokeAuthorization') }}</el-button
         >
       </div>
     </el-card>
@@ -175,18 +190,18 @@
       <template #header>
         <div class="card-header">
           <el-icon><Tickets /></el-icon>
-          <span>谱面列表</span>
+          <span>{{ t('chartList') }}</span>
           <div class="header-actions">
             <el-button circle :icon="Refresh" :loading="loading" @click="load" />
           </div>
         </div>
       </template>
       <el-tabs v-model="tab" @tab-change="switchTab">
-        <el-tab-pane label="全部作品" name="all" />
-        <el-tab-pane v-if="currentUser" label="我的投稿" name="mine" />
+        <el-tab-pane :label="t('allCharts')" name="all" />
+        <el-tab-pane v-if="currentUser" :label="t('mySubmissions')" name="mine" />
       </el-tabs>
       <el-skeleton v-if="loading" :rows="4" animated />
-      <el-empty v-else-if="!charts.length" description="暂无谱面" />
+      <el-empty v-else-if="!charts.length" :description="t('noChartsYet')" />
       <div v-else class="charts-grid">
         <el-card
           v-for="chart in charts"
@@ -215,10 +230,16 @@
               >
                 {{ syncLabels[chart.net_sync_status] }}
               </el-tag>
-              <el-tag v-if="chart.is_collaboration" size="small" type="info">合作谱面</el-tag>
+              <el-tag v-if="chart.is_collaboration" size="small" type="info">{{
+                t('collaboration')
+              }}</el-tag>
             </div>
             <p v-if="chart.is_collaboration && chart.contributors?.length" class="contributors">
-              合作谱师：{{ chart.contributors.map((account) => account.username).join('、') }}
+              {{
+                t('collaboratorsValue', {
+                  value0: chart.contributors.map((account) => account.username).join('、'),
+                })
+              }}
             </p>
             <audio v-if="chart.audio_url" controls preload="none" :src="chart.audio_url" />
           </div>
@@ -228,9 +249,8 @@
               :icon="Download"
               :loading="downloading === chart.id"
               @click="download(chart.id)"
+              >{{ t('downloadChartBundle') }}</el-button
             >
-              下载谱面包
-            </el-button>
             <el-button
               v-if="
                 tab === 'mine' &&
@@ -241,9 +261,8 @@
               :icon="Refresh"
               :loading="retrying === chart.id"
               @click="retry(chart)"
+              >{{ t('retryNetSync') }}</el-button
             >
-              重试 Net 同步
-            </el-button>
             <el-button
               v-if="chart.net_url"
               tag="a"
@@ -251,9 +270,8 @@
               target="_blank"
               rel="noopener noreferrer"
               :icon="Link"
+              >{{ t('viewOnNet') }}</el-button
             >
-              在 Net 查看
-            </el-button>
           </div>
         </el-card>
       </div>
@@ -270,7 +288,10 @@
   </div>
 </template>
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
+
+import { computed, ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Upload,
@@ -347,7 +368,7 @@ const grant = async () => {
   try {
     await grantCollaboration(uploaderId.value)
     uploaderId.value = null
-    ElMessage.success('已授权')
+    ElMessage.success(t('authorizationGranted'))
     await refreshSubmission()
   } catch (err) {
     ElMessage.error(err.message)
@@ -360,7 +381,7 @@ const revoke = async (consent) => {
   revoking.value = consent.id
   try {
     await revokeCollaboration(consent.id)
-    ElMessage.success('已撤销授权')
+    ElMessage.success(t('authorizationRevoked'))
     await refreshSubmission()
   } catch (err) {
     ElMessage.error(err.message)
@@ -376,52 +397,52 @@ const fileLists = reactive({
   cover_image: [],
   background_video: [],
 })
-const fileFields = [
+const fileFields = computed(() => [
   {
     name: 'chart_file',
-    label: '谱面文件',
+    label: t('chartFile'),
     accept: '.txt',
     required: true,
     icon: Document,
-    button: '选择谱面',
-    tip: 'maidata.txt 谱面文件，标题与谱师名义可自动读取',
+    button: t('chooseChart'),
+    tip: t('maidataTxtChartFileTitleAndDesignerAre'),
   },
   {
     name: 'audio_file',
-    label: '音频',
+    label: t('audio'),
     accept: 'audio/*',
     required: true,
     icon: Headset,
-    button: '选择音频',
-    tip: '谱面对应的音频文件',
+    button: t('chooseAudio'),
+    tip: t('audioFileForThisChart'),
   },
   {
     name: 'cover_image',
-    label: '封面',
+    label: t('coverImage'),
     accept: '.jpg,.jpeg,.png,.webp',
     required: true,
     icon: Picture,
-    button: '选择封面',
-    tip: '支持 JPG、PNG、WEBP 格式',
+    button: t('chooseCoverImage'),
+    tip: t('supportsJpgPngAndWebp'),
   },
   {
     name: 'background_video',
-    label: '背景视频',
+    label: t('backgroundVideo'),
     accept: '.mp4',
     required: false,
     icon: VideoCamera,
-    button: '选择视频（可选）',
-    tip: '可选，支持 MP4 格式',
+    button: t('chooseVideoOptional'),
+    tip: t('optionalSupportsMp'),
   },
-]
+])
 let submissionKey = crypto.randomUUID()
-const syncLabels = {
-  pending: '待同步',
-  syncing: '正在同步 Net',
-  synced: '已同步 Net',
-  failed: 'Net 同步失败',
-  disabled: 'Net 同步未启用',
-}
+const syncLabels = computed(() => ({
+  pending: t('pendingSync'),
+  syncing: t('syncingToNet'),
+  synced: t('syncedToNet'),
+  failed: t('netSyncFailed'),
+  disabled: t('netSyncDisabled'),
+}))
 const syncTypes = {
   pending: 'info',
   syncing: 'warning',
@@ -458,9 +479,9 @@ const switchTab = () => {
   load()
 }
 const upload = async () => {
-  const missing = fileFields.find((field) => field.required && !files[field.name])
+  const missing = fileFields.value.find((field) => field.required && !files[field.name])
   if (missing) {
-    ElMessage.warning(`请选择${missing.label}`)
+    ElMessage.warning(t('pleaseSelectValue', { value0: missing.label }))
     return
   }
   uploading.value = true
@@ -472,7 +493,7 @@ const upload = async () => {
     data.append('submission_key', submissionKey)
     for (const id of collaboratorIds.value) data.append('collaborator_ids', id)
     await submitChart(data)
-    ElMessage.success('投稿已保存')
+    ElMessage.success(t('submissionSaved'))
     Object.keys(files).forEach((key) => delete files[key])
     Object.keys(fileLists).forEach((key) => (fileLists[key] = []))
     form.title = ''

@@ -68,3 +68,13 @@ npm run format:check
 ## 自动部署
 
 push/PR 自动检查；main push 全部检查通过后，SSH 触发服务器按已验证 SHA 增量部署。首次安装使用 `deploy.sh`，日常更新使用 `update.sh`。Secrets 配置、服务器首次切换注意事项及两种脚本说明见 [CI/CD 与部署](doc/CI_CD.md)。
+
+## 前端多语言
+
+前端使用 Vue I18n，支持简体中文（`zh-CN`）和英文（`en`）。桌面和移动端导航均提供语言切换，选择保存在 `xmmcg.locale`。首次访问匹配浏览器语言，不支持的语言回退到简体中文。
+
+- 翻译文件：`front/src/i18n/zh-CN.json`、`front/src/i18n/en.json`；新增文案时两份文件使用相同的键和插值参数。
+- 组件使用 `useI18n()` 的 `t()`；需要响应语言切换的规则、配置和标签使用 `computed()`。组件外可从 `src/i18n` 导入 `t`。
+- 页面标题、Element Plus 内置文案、日期、比赛状态和倒计时随语言变化。
+- 公告、Banner、比赛名称、歌曲及谱面信息属于后台或用户内容，保留原文。后端返回的业务错误目前也保留原文；请求已携带 `Accept-Language`，但后端尚未接入业务错误翻译。页脚角色日语台词保留原样。
+- 执行 `cd front && npm run check:i18n` 检查翻译键、参数、文案编译、语言选择及运行时切换；CI 同时运行此检查、格式检查和生产构建。

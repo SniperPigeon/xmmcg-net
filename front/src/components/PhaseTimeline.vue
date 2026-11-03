@@ -1,6 +1,6 @@
 <template>
   <div class="phase-timeline-container">
-    <h2>竞赛阶段日程</h2>
+    <h2>{{ t('competitionSchedule') }}</h2>
 
     <el-timeline>
       <el-timeline-item
@@ -31,13 +31,14 @@
             <!-- 剩余时间 -->
             <div class="phase-time-info">
               <span v-if="phase.status === 'upcoming'">
-                <strong>距离开始：</strong> {{ phase.time_remaining }}
+                <strong>{{ t('startsIn') }}</strong> {{ remainingTime(phase) }}
               </span>
               <span v-else-if="phase.status === 'active'">
-                <strong style="color: #67c23a">进行中，剩余：</strong> {{ phase.time_remaining }}
+                <strong style="color: #67c23a">{{ t('inProgressRemaining') }}</strong>
+                {{ remainingTime(phase) }}
               </span>
               <span v-else>
-                <strong>已结束</strong>
+                <strong>{{ t('ended') }}</strong>
               </span>
             </div>
           </div>
@@ -48,15 +49,24 @@
 </template>
 
 <script setup>
+import { useI18n } from 'vue-i18n'
+const { t, locale } = useI18n()
+
 import { ref, onMounted, onUnmounted } from 'vue'
 import { getCompetitionPhases } from '../api/index.js'
 
 const phases = ref([])
 let timer
+const now = ref(Date.now())
+const remainingTime = (phase) => {
+  const target = phase.status === 'upcoming' ? phase.start_time : phase.end_time
+  const hours = Math.max(0, Math.floor((new Date(target).getTime() - now.value) / 3600000))
+  return t('remainingTime', { days: Math.floor(hours / 24), hours: hours % 24 })
+}
 
 const formatDate = (dateString) => {
   const date = new Date(dateString)
-  return date.toLocaleDateString('zh-CN', {
+  return date.toLocaleDateString(locale.value, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -90,13 +100,13 @@ const getPhaseTagType = (status) => {
 const getPhaseStatusText = (status) => {
   switch (status) {
     case 'active':
-      return '进行中'
+      return t('inProgress')
     case 'upcoming':
-      return '即将开始'
+      return t('upcoming')
     case 'ended':
-      return '已结束'
+      return t('ended')
     default:
-      return '未知'
+      return t('unknown')
   }
 }
 
@@ -115,6 +125,7 @@ onMounted(() => {
 
   // 每 30 秒刷新一次（更新剩余时间和进度）
   timer = setInterval(() => {
+    now.value = Date.now()
     loadPhases()
   }, 30000)
 })

@@ -2,7 +2,9 @@
   <div class="register-page">
     <el-card class="register-card">
       <template #header>
-        <div class="title-header"><h2>用户注册</h2></div>
+        <div class="title-header">
+          <h2>{{ t('userRegistration') }}</h2>
+        </div>
       </template>
       <el-form
         ref="formRef"
@@ -12,27 +14,27 @@
         :disabled="busy"
         @submit.prevent="submit"
       >
-        <el-form-item label="用户名" prop="username">
+        <el-form-item :label="t('username')" prop="username">
           <el-input
             v-model="form.username"
-            placeholder="请输入用户名"
+            :placeholder="t('enterYourUsername')"
             :prefix-icon="User"
             autocomplete="username"
             maxlength="20"
           />
         </el-form-item>
         <el-form-item label-width="0" class="bind-switch">
-          <el-checkbox v-model="bindMain">这是我的小号，绑定已有大号</el-checkbox>
+          <el-checkbox v-model="bindMain">{{ t('thisIsMyAlternateAccountLinkItTo') }}</el-checkbox>
         </el-form-item>
         <template v-if="bindMain">
-          <el-form-item label="选择大号" prop="main_account_id">
+          <el-form-item :label="t('chooseMainAccount')" prop="main_account_id">
             <el-select
               v-model="form.main_account_id"
               filterable
               remote
               :remote-method="search"
               :loading="searching"
-              placeholder="输入至少两个字符搜索用户名"
+              :placeholder="t('enterAtLeastTwoCharactersToSearchUsernames')"
               style="width: 100%"
               ><el-option
                 v-for="account in accounts"
@@ -41,66 +43,66 @@
                 :value="account.id"
             /></el-select>
           </el-form-item>
-          <el-form-item label="大号密码" prop="main_password">
+          <el-form-item :label="t('mainAccountPassword')" prop="main_password">
             <el-input
               v-model="form.main_password"
               type="password"
               show-password
-              placeholder="验证大号密码"
+              :placeholder="t('verifyMainAccountPassword')"
               :prefix-icon="Lock"
               autocomplete="off"
             />
           </el-form-item>
-          <p class="bind-hint">联系方式使用大号的资料。一个大号可绑定多个小号。</p>
+          <p class="bind-hint">{{ t('contactDetailsAreInheritedFromTheMainAccount') }}</p>
         </template>
         <template v-else>
-          <el-form-item label="QQ号" prop="qqid">
+          <el-form-item :label="t('qqNumber')" prop="qqid">
             <el-input
               v-model="form.qqid"
-              placeholder="请输入主要使用的QQ号"
+              :placeholder="t('enterYourPrimaryQqNumber')"
               :prefix-icon="ChatDotRound"
               inputmode="numeric"
             />
           </el-form-item>
-          <el-form-item label="邮箱" prop="email">
+          <el-form-item :label="t('email')" prop="email">
             <el-input
               v-model="form.email"
               type="email"
-              placeholder="请输入邮箱"
+              :placeholder="t('enterYourEmail')"
               :prefix-icon="Message"
               autocomplete="email"
             />
           </el-form-item>
         </template>
-        <el-form-item label="密码" prop="password">
+        <el-form-item :label="t('password')" prop="password">
           <el-input
             v-model="form.password"
             type="password"
             show-password
-            placeholder="请输入新账号密码"
+            :placeholder="t('enterAPasswordForTheNewAccount')"
             :prefix-icon="Lock"
             autocomplete="new-password"
           />
         </el-form-item>
-        <el-form-item label="确认密码" prop="password_confirm">
+        <el-form-item :label="t('confirmPassword')" prop="password_confirm">
           <el-input
             v-model="form.password_confirm"
             type="password"
             show-password
-            placeholder="请再次输入密码"
+            :placeholder="t('enterYourPasswordAgain')"
             :prefix-icon="Lock"
             autocomplete="new-password"
           />
         </el-form-item>
         <el-form-item>
-          <el-button native-type="submit" type="primary" :loading="busy" style="width: 100%"
-            >注册</el-button
-          >
+          <el-button native-type="submit" type="primary" :loading="busy" style="width: 100%">{{
+            t('register')
+          }}</el-button>
         </el-form-item>
         <el-form-item>
           <div class="register-footer">
-            <span>已有账号？</span>
-            <el-link type="primary" @click="$router.push('/login')">立即登录</el-link>
+            <span>{{ t('alreadyHaveAnAccount') }}</span>
+            <el-link type="primary" @click="$router.push('/login')">{{ t('logInNow') }}</el-link>
           </div>
         </el-form-item>
       </el-form>
@@ -108,7 +110,10 @@
   </div>
 </template>
 <script setup>
-import { ref, reactive } from 'vue'
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
+
+import { computed, ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock, Message, ChatDotRound } from '@element-plus/icons-vue'
@@ -129,21 +134,24 @@ const form = reactive({
   main_password: '',
 })
 const required = (message) => ({ required: true, message, trigger: 'blur' })
-const rules = {
+const rules = computed(() => ({
   username: [
-    required('请输入用户名'),
-    { min: 3, max: 20, message: '用户名长度为 3-20 个字符', trigger: 'blur' },
+    required(t('enterYourUsername')),
+    { min: 3, max: 20, message: t('usernameMustBeCharacters'), trigger: 'blur' },
   ],
-  main_account_id: [{ required: true, message: '请选择大号', trigger: 'change' }],
-  main_password: [required('请输入大号密码')],
+  main_account_id: [{ required: true, message: t('pleaseChooseAMainAccount'), trigger: 'change' }],
+  main_password: [required(t('enterYourMainAccountPassword'))],
   qqid: [
-    required('请输入QQ号'),
-    { pattern: /^[1-9][0-9]{4,14}$/, message: 'QQ号格式不正确', trigger: 'blur' },
+    required(t('enterYourQqNumber')),
+    { pattern: /^[1-9][0-9]{4,14}$/, message: t('invalidQqNumber'), trigger: 'blur' },
   ],
-  email: [required('请输入邮箱'), { type: 'email', message: '邮箱格式不正确', trigger: 'blur' }],
-  password: [required('请输入密码')],
-  password_confirm: [required('请再次输入密码')],
-}
+  email: [
+    required(t('enterYourEmail')),
+    { type: 'email', message: t('invalidEmailAddress'), trigger: 'blur' },
+  ],
+  password: [required(t('enterYourPassword'))],
+  password_confirm: [required(t('enterYourPasswordAgain'))],
+}))
 let searchVersion = 0
 const search = async (query) => {
   const version = ++searchVersion
@@ -160,11 +168,11 @@ const search = async (query) => {
 const submit = async () => {
   if (!(await formRef.value?.validate().catch(() => false))) return
   if (form.password !== form.password_confirm) {
-    ElMessage.error('两次密码不一致')
+    ElMessage.error(t('passwordsDoNotMatch'))
     return
   }
   if (bindMain.value && !form.main_account_id) {
-    ElMessage.error('请选择大号')
+    ElMessage.error(t('pleaseChooseAMainAccount'))
     return
   }
   busy.value = true
@@ -182,7 +190,7 @@ const submit = async () => {
     )
     await register(data)
     form.main_password = ''
-    ElMessage.success('注册成功，请登录')
+    ElMessage.success(t('registrationSuccessfulPleaseLogIn'))
     router.push('/login')
   } catch (err) {
     ElMessage.error(err.message)

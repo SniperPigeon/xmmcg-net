@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { i18n, t } from '../i18n'
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
@@ -11,6 +12,7 @@ export async function ensureCsrfToken() {
   csrfToken = response.csrfToken
 }
 api.interceptors.request.use(async (config) => {
+  config.headers['Accept-Language'] = i18n.global.locale.value
   if (!['get', 'head', 'options'].includes(config.method)) {
     // Login rotates the CSRF token; always fetch a current token before writes.
     await ensureCsrfToken()
@@ -31,7 +33,7 @@ api.interceptors.response.use(
             Object.entries(data)
               .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join('；') : value}`)
               .join('；')) ||
-          '请求失败，请稍后重试'
+          t('requestFailed')
     return Promise.reject(error)
   },
 )
