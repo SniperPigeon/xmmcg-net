@@ -43,16 +43,17 @@
         v-if="currentUser && canUpload && submissionStatus?.can_upload"
         ref="formRef"
         :model="form"
+        :rules="formRules"
         label-width="110px"
         class="upload-form"
         :disabled="uploading"
         @submit.prevent="upload"
       >
-        <el-form-item label="标题">
-          <el-input v-model="form.title" maxlength="200" placeholder="留空则从谱面读取" />
+        <el-form-item label="曲名" prop="title" required>
+          <el-input v-model="form.title" maxlength="200" placeholder="请输入曲名" />
         </el-form-item>
-        <el-form-item label="谱师名义">
-          <el-input v-model="form.designer" maxlength="100" placeholder="留空则从谱面读取" />
+        <el-form-item label="谱师名义" prop="designer" required>
+          <el-input v-model="form.designer" maxlength="100" placeholder="请输入谱师名义" />
         </el-form-item>
         <el-form-item v-if="submissionStatus.allow_collaboration" label="合作谱师">
           <el-select
@@ -312,6 +313,10 @@ const downloading = ref(null),
   canUpload = ref(false),
   formRef = ref(null)
 const form = reactive({ title: '', designer: '' })
+const formRules = {
+  title: [{ required: true, whitespace: true, message: '请输入曲名', trigger: 'blur' }],
+  designer: [{ required: true, whitespace: true, message: '请输入谱师名义', trigger: 'blur' }],
+}
 const submissionStatus = ref(null),
   collaboratorIds = ref([]),
   uploaderId = ref(null),
@@ -384,7 +389,7 @@ const fileFields = [
     required: true,
     icon: Document,
     button: '选择谱面',
-    tip: 'maidata.txt 谱面文件，标题与谱师名义可自动读取',
+    tip: 'maidata.txt 谱面文件，曲名与谱师名义请在上方填写',
   },
   {
     name: 'audio_file',
@@ -458,6 +463,7 @@ const switchTab = () => {
   load()
 }
 const upload = async () => {
+  if (!(await formRef.value.validate().catch(() => false))) return
   const missing = fileFields.find((field) => field.required && !files[field.name])
   if (missing) {
     ElMessage.warning(`请选择${missing.label}`)
@@ -467,8 +473,8 @@ const upload = async () => {
   try {
     const data = new FormData()
     for (const [name, file] of Object.entries(files)) if (file) data.append(name, file)
-    data.append('title', form.title)
-    data.append('designer', form.designer)
+    data.append('title', form.title.trim())
+    data.append('designer', form.designer.trim())
     data.append('submission_key', submissionKey)
     for (const id of collaboratorIds.value) data.append('collaborator_ids', id)
     await submitChart(data)

@@ -318,7 +318,35 @@ class ChartAdmin(admin.ModelAdmin):
         return False
 
     def has_delete_permission(self, request, obj=None):
-        return False
+        return (
+            obj is None or obj.competition.status != "archived"
+        ) and super().has_delete_permission(request, obj)
+
+    def get_deleted_objects(self, objs, request):
+        deleted, counts, permissions, protected = super().get_deleted_objects(
+            objs, request
+        )
+        # These records are read-only individually, but belong to the chart being
+        # deleted. Keep them visible in the confirmation and preserve chart checks.
+        permissions.difference_update(
+            model._meta.verbose_name
+            for model in (CollaborationConsent, PeerReview, PeerReviewAllocation)
+        )
+        return deleted, counts, permissions, protected
+
+    @transaction.atomic
+    def delete_queryset(self, request, queryset):
+        if queryset.filter(competition__status="archived").exists():
+            raise PermissionDenied("已归档比赛的谱面不能删除")
+        super().delete_queryset(request, queryset)
+
+    @transaction.atomic
+    def delete_model(self, request, obj):
+        if Competition.objects.filter(
+            pk=obj.competition_id, status="archived"
+        ).exists():
+            raise PermissionDenied("已归档比赛的谱面不能删除")
+        super().delete_model(request, obj)
 
     def has_change_permission(self, request, obj=None):
         return (

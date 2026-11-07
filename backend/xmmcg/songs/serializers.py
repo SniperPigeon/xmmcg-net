@@ -1,5 +1,4 @@
 import hashlib
-import re
 from pathlib import PurePosixPath
 
 from django.conf import settings
@@ -59,8 +58,8 @@ class ChartUploadSerializer(AssetValidationMixin, serializers.ModelSerializer):
             "collaborator_ids",
         )
         extra_kwargs = {
-            "title": {"required": False, "allow_blank": True},
-            "designer": {"required": False, "allow_blank": True},
+            "title": {"required": True, "allow_blank": False},
+            "designer": {"required": True, "allow_blank": False},
             "chart_file": {"required": True, "allow_null": False},
             "audio_file": {"required": True, "allow_null": False},
             "cover_image": {"required": True, "allow_null": False},
@@ -69,31 +68,12 @@ class ChartUploadSerializer(AssetValidationMixin, serializers.ModelSerializer):
     def validate_chart_file(self, value):
         validate_asset(value, {".txt"}, settings.MAX_CHART_SIZE_MB, "谱面")
         try:
-            content = value.read().decode("utf-8-sig")
+            value.read().decode("utf-8-sig")
         except UnicodeDecodeError:
             raise serializers.ValidationError("谱面需要使用 UTF-8 编码")
         finally:
             value.seek(0)
-        self.metadata = {
-            key: match.group(1).strip()
-            if (match := re.search(r"^\s*&" + key + r"=([^\r\n]*)", content, re.M))
-            else ""
-            for key in ("title", "des")
-        }
         return value
-
-    def validate(self, attrs):
-        attrs["title"] = (
-            attrs.get("title") or self.metadata.get("title") or "未命名谱面"
-        )
-        attrs["designer"] = (
-            attrs.get("designer")
-            or self.metadata.get("des")
-            or self.context["request"].user.username
-        )
-        if len(attrs["title"]) > 200 or len(attrs["designer"]) > 100:
-            raise serializers.ValidationError("标题或谱师名义过长")
-        return attrs
 
 
 class ChartSerializer(serializers.ModelSerializer):
