@@ -254,11 +254,13 @@ class CollaborationTests(TestCase):
         self.assertEqual(self.quota(self.alice)["used"], 0)
         self.assertEqual(self.quota(self.bob)["used"], 0)
 
-    def test_archive_does_not_free_slots_in_same_edition_and_next_edition_resets(self):
+    def test_archiving_chart_frees_slots_and_next_edition_resets(self):
         self.grant(self.bob, self.alice)
         self.assertEqual(self.upload(self.alice, [self.bob]).status_code, 201)
         Chart.objects.update(status="archived")
-        self.assertEqual(self.upload(self.bob).status_code, 400)
+        self.assertEqual(self.quota(self.alice)["used"], 0)
+        self.assertEqual(self.quota(self.bob)["used"], 0)
+        self.assertEqual(self.upload(self.bob).status_code, 201)
         archive_competition(self.competition.pk)
         new = Competition.objects.create(name="下一届合作比赛")
         activate_competition(new.pk)

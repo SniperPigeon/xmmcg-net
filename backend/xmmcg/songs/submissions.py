@@ -28,7 +28,11 @@ def quota_accounts(competition, user):
 
 
 def quota_used(competition, user):
-    return participation_charts(competition, quota_accounts(competition, user)).count()
+    return (
+        participation_charts(competition, quota_accounts(competition, user))
+        .filter(status="submitted")
+        .count()
+    )
 
 
 def ensure_quota(competition, user):

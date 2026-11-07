@@ -487,7 +487,7 @@ class CollaborationConsent(models.Model):
         Chart,
         null=True,
         blank=True,
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="collaboration_consents",
         verbose_name="已用于谱面",
     )

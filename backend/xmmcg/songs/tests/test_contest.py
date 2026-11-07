@@ -21,6 +21,8 @@ def upload_files(**overrides):
     cover = BytesIO()
     Image.new("RGB", (2, 2)).save(cover, format="PNG")
     data = {
+        "title": "任意曲名",
+        "designer": "任意名义",
         "submission_key": str(uuid4()),
         "chart_file": SimpleUploadedFile(
             "original.txt", "&title=任意曲名\n&des=任意名义\n&inote_5=1,2,3,E".encode()
@@ -76,6 +78,24 @@ class ChartTests(TestCase):
                 self.assertEqual(
                     set(archive.namelist()), {"maidata.txt", "track.mp3", "bg.png"}
                 )
+
+    def test_title_and_designer_are_required_before_storage(self):
+        for field in ("title", "designer"):
+            for value in (None, "", " \t\n"):
+                with self.subTest(field=field, value=value):
+                    data = upload_files()
+                    if value is None:
+                        del data[field]
+                    else:
+                        data[field] = value
+                    with patch("songs.chart_views.store_new_assets") as store:
+                        response = self.client.post(
+                            "/api/charts/", data, format="multipart"
+                        )
+                    self.assertEqual(response.status_code, 400)
+                    self.assertIn(field, response.data)
+                    store.assert_not_called()
+        self.assertFalse(Chart.objects.exists())
 
     def test_anonymous_upload_rejected(self):
         self.client.force_authenticate(None)
