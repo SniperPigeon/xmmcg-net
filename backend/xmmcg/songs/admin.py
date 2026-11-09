@@ -32,6 +32,7 @@ from .draws import run_draw
 from .exports import export_peer_review_scores
 from .majdata_service import sync_chart
 from .bundles import BundleError, chart_bundle_response
+from .admin_forms import ChartAdminForm
 
 
 @admin.register(Announcement)
@@ -279,6 +280,8 @@ class PhaseAdmin(admin.ModelAdmin):
 
 @admin.register(Chart)
 class ChartAdmin(admin.ModelAdmin):
+    form = ChartAdminForm
+
     list_display = (
         "id",
         "title",
@@ -295,13 +298,7 @@ class ChartAdmin(admin.ModelAdmin):
         "competition",
         "user",
         "contributors",
-        "title",
-        "designer",
         "source_song",
-        "audio_file",
-        "cover_image",
-        "background_video",
-        "chart_file",
         "submission_key",
         "net_sync_status",
         "net_sync_error",
@@ -352,6 +349,26 @@ class ChartAdmin(admin.ModelAdmin):
         return (
             obj is None or obj.competition.status != "archived"
         ) and super().has_change_permission(request, obj)
+
+    def save_model(self, request, obj, form, change):
+        # Django wraps the change view in a write transaction. Recheck the current
+        # record before saving; never allow a stale form to edit archived history.
+        current = Chart.objects.select_related("competition").get(pk=obj.pk)
+        if (
+            current.competition.status == "archived"
+            or current.net_sync_status == "syncing"
+        ):
+            raise PermissionDenied("比赛已归档或谱面正在同步，不能编辑")
+        assets = {"chart_file", "audio_file", "cover_image", "background_video"}
+        if assets.intersection(form.changed_data):
+            if current.net_sync_status in {"synced", "unknown"}:
+                obj.net_sync_status = "unknown"
+                obj.net_sync_error = "后台已修改素材，请人工核对并更新 Net 上的副本"
+                self.message_user(request, obj.net_sync_error, level=messages.WARNING)
+            else:
+                obj.net_sync_status = "pending"
+                obj.net_sync_error = ""
+        super().save_model(request, obj, form, change)
 
     @admin.action(description="重试失败的 Net 同步", permissions=["change"])
     def retry_net(self, request, queryset):
