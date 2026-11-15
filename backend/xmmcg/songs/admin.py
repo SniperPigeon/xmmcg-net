@@ -102,11 +102,6 @@ class CompetitionAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
 
-    def has_change_permission(self, request, obj=None):
-        return (
-            obj is None or obj.status != "archived"
-        ) and super().has_change_permission(request, obj)
-
     def save_model(self, request, obj, form, change):
         source = form.cleaned_data.get("copy_from") if not change else None
         if source:
@@ -142,7 +137,9 @@ class CompetitionAdmin(admin.ModelAdmin):
 
     def lifecycle(self, request, competition_id, action):
         competition = get_object_or_404(Competition, pk=competition_id)
-        if not self.has_change_permission(request, competition):
+        if competition.status == "archived" or not self.has_change_permission(
+            request, competition
+        ):
             raise PermissionDenied
         label, operation = (
             ("启用比赛", activate_competition)
@@ -180,7 +177,9 @@ class CompetitionAdmin(admin.ModelAdmin):
 
     def allocate(self, request, competition_id):
         competition = get_object_or_404(Competition, pk=competition_id)
-        if not self.has_change_permission(request, competition):
+        if competition.status == "archived" or not self.has_change_permission(
+            request, competition
+        ):
             raise PermissionDenied
         if request.method == "POST":
             try:
@@ -234,11 +233,6 @@ class PhaseAdmin(admin.ModelAdmin):
     list_filter = ("competition", "kind", "is_active")
     actions = ["draw_songs"]
 
-    def has_change_permission(self, request, obj=None):
-        return (
-            obj is None or obj.competition.status != "archived"
-        ) and super().has_change_permission(request, obj)
-
     def has_delete_permission(self, request, obj=None):
         return (
             obj is None or obj.competition.status != "archived"
@@ -257,14 +251,6 @@ class PhaseAdmin(admin.ModelAdmin):
         ).exists():
             raise PermissionDenied("已归档比赛的阶段不能删除")
         super().delete_model(request, obj)
-
-    def get_readonly_fields(self, request, obj=None):
-        return ("competition",) if obj else ()
-
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "competition":
-            kwargs["queryset"] = Competition.objects.exclude(status="archived")
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @admin.action(description="执行歌曲抽选（每阶段仅一次）", permissions=["change"])
     def draw_songs(self, request, queryset):
@@ -293,22 +279,7 @@ class ChartAdmin(admin.ModelAdmin):
     )
     list_filter = ("competition", "status", "net_sync_status")
     search_fields = ("title", "designer", "user__username")
-    readonly_fields = (
-        "guid",
-        "competition",
-        "user",
-        "contributors",
-        "source_song",
-        "submission_key",
-        "net_sync_status",
-        "net_sync_error",
-        "net_url",
-        "net_response",
-        "net_synced_at",
-        "legacy_metadata",
-        "created_at",
-        "submitted_at",
-    )
+    readonly_fields = ("guid", "submission_key", "created_at", "net_synced_at")
     actions = ["download_charts", "retry_net", "export_scores"]
 
     def has_add_permission(self, request):
@@ -345,20 +316,11 @@ class ChartAdmin(admin.ModelAdmin):
             raise PermissionDenied("已归档比赛的谱面不能删除")
         super().delete_model(request, obj)
 
-    def has_change_permission(self, request, obj=None):
-        return (
-            obj is None or obj.competition.status != "archived"
-        ) and super().has_change_permission(request, obj)
-
     def save_model(self, request, obj, form, change):
-        # Django wraps the change view in a write transaction. Recheck the current
-        # record before saving; never allow a stale form to edit archived history.
+        # Recheck in-flight synchronization inside the admin write transaction.
         current = Chart.objects.select_related("competition").get(pk=obj.pk)
-        if (
-            current.competition.status == "archived"
-            or current.net_sync_status == "syncing"
-        ):
-            raise PermissionDenied("比赛已归档或谱面正在同步，不能编辑")
+        if current.net_sync_status == "syncing":
+            raise PermissionDenied("谱面正在同步，不能编辑")
         assets = {"chart_file", "audio_file", "cover_image", "background_video"}
         if assets.intersection(form.changed_data):
             if current.net_sync_status in {"synced", "unknown"}:
@@ -402,11 +364,8 @@ class ChartAdmin(admin.ModelAdmin):
             self.message_user(request, str(error), level=messages.ERROR)
 
 
-class ReadOnlyAdmin(admin.ModelAdmin):
+class ExistingRecordAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
-        return False
-
-    def has_change_permission(self, request, obj=None):
         return False
 
     def has_delete_permission(self, request, obj=None):
@@ -414,42 +373,42 @@ class ReadOnlyAdmin(admin.ModelAdmin):
 
 
 @admin.register(Song)
-class SongAdmin(ReadOnlyAdmin):
+class SongAdmin(ExistingRecordAdmin):
     list_display = ("id", "title", "competition", "user", "phase")
     list_filter = ("competition",)
 
 
 @admin.register(PeerReview)
-class ReviewAdmin(ReadOnlyAdmin):
+class ReviewAdmin(ExistingRecordAdmin):
     list_filter = ("chart__competition",)
     list_display = ("reviewer", "chart", "score", "favorite", "created_at")
 
 
 @admin.register(PeerReviewAllocation)
-class AllocationAdmin(ReadOnlyAdmin):
+class AllocationAdmin(ExistingRecordAdmin):
     list_filter = ("chart__competition",)
     list_display = ("reviewer", "chart", "allocated_at")
 
 
 @admin.register(LegacyRecord)
-class LegacyAdmin(ReadOnlyAdmin):
+class LegacyAdmin(ExistingRecordAdmin):
     list_display = ("kind", "original_id")
     list_filter = ("kind",)
 
 
 @admin.register(SongDraw)
-class DrawAdmin(ReadOnlyAdmin):
+class DrawAdmin(ExistingRecordAdmin):
     list_display = ("phase", "completed_at")
     list_filter = ("phase__competition",)
 
 
 @admin.register(SongDrawEntry)
-class DrawEntryAdmin(ReadOnlyAdmin):
+class DrawEntryAdmin(ExistingRecordAdmin):
     list_display = ("draw", "user", "song")
     list_filter = ("draw__phase__competition",)
 
 
 @admin.register(CollaborationConsent)
-class CollaborationConsentAdmin(ReadOnlyAdmin):
+class CollaborationConsentAdmin(ExistingRecordAdmin):
     list_display = ("competition", "author", "uploader", "used_by", "created_at")
     list_filter = ("competition",)

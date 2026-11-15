@@ -8,15 +8,7 @@ from .serializers import ChartUploadSerializer
 class ChartAdminForm(forms.ModelForm):
     class Meta:
         model = Chart
-        fields = (
-            "title",
-            "designer",
-            "status",
-            "chart_file",
-            "audio_file",
-            "cover_image",
-            "background_video",
-        )
+        fields = "__all__"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

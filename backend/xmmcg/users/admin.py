@@ -6,8 +6,7 @@ from .models import UserProfile
 class UserProfileAdmin(admin.ModelAdmin):
     list_display = ("user", "main_account", "qqid", "preferred_name")
     search_fields = ("user__username", "preferred_name")
-    # Changing identity after scoring starts would invalidate assignments and scores.
-    readonly_fields = ("user", "main_account", "created_at", "updated_at")
+    readonly_fields = ("created_at", "updated_at")
 
     def has_add_permission(self, request):
         return False

@@ -32,52 +32,30 @@ class ChartEditingTests(TestCase):
             "title": "新曲名",
             "designer": "新名义",
             "status": "submitted",
+            "competition": self.competition.pk,
+            "user": self.author.pk,
+            "contributors": [self.author.pk],
+            "net_sync_status": "disabled",
+            "legacy_metadata": "{}",
             **kwargs,
         }
 
-    def test_edit_metadata_and_ignore_system_field_tampering(self):
-        response = self.client.get(self.url)
-        fields = response.context["adminform"].form.fields
-        self.assertEqual(
-            set(fields),
-            {
-                "title",
-                "designer",
-                "status",
-                "chart_file",
-                "audio_file",
-                "cover_image",
-                "background_video",
-            },
+    def test_edit_metadata_and_author_relationships(self):
+        fields = self.client.get(self.url).context["adminform"].form.fields
+        self.assertTrue(
+            {"competition", "user", "contributors", "net_sync_status"} <= set(fields)
         )
-        original = (
-            self.chart.guid,
-            self.chart.user_id,
-            self.chart.competition_id,
-            self.chart.chart_file.name,
-        )
+        self.assertNotIn("guid", fields)
+        original_guid = self.chart.guid
         response = self.client.post(
-            self.url,
-            self.payload(
-                user=self.staff.pk,
-                contributors=[self.staff.pk],
-                net_sync_status="synced",
-            ),
+            self.url, self.payload(user=self.staff.pk, contributors=[self.staff.pk])
         )
         self.assertEqual(response.status_code, 302)
         self.chart.refresh_from_db()
-        self.assertEqual((self.chart.title, self.chart.designer), ("新曲名", "新名义"))
-        self.assertEqual(
-            (
-                self.chart.guid,
-                self.chart.user_id,
-                self.chart.competition_id,
-                self.chart.chart_file.name,
-            ),
-            original,
-        )
-        self.assertEqual(list(self.chart.contributors.all()), [self.author])
-        self.assertEqual(self.chart.net_sync_status, "disabled")
+        self.assertEqual(self.chart.user_id, self.staff.pk)
+        self.assertEqual(list(self.chart.contributors.all()), [self.staff])
+        self.assertEqual(self.chart.guid, original_guid)
+        self.assertEqual(self.chart.title, "新曲名")
 
     def test_replace_assets_and_flag_remote_copy(self):
         old_key = self.chart.chart_file.name
@@ -87,7 +65,9 @@ class ChartEditingTests(TestCase):
         )
         data = upload_files()
         data.pop("submission_key")
-        response = self.client.post(self.url, {**data, "status": "submitted"})
+        response = self.client.post(
+            self.url, self.payload(**data, net_url="https://example.com/chart")
+        )
         self.assertEqual(response.status_code, 302)
         self.chart.refresh_from_db()
         self.assertNotEqual(old_key, self.chart.chart_file.name)
@@ -111,7 +91,7 @@ class ChartEditingTests(TestCase):
         self.chart.refresh_from_db()
         self.assertEqual(self.chart.title, "任意曲名")
 
-    def test_archive_and_view_only_permission_reject_changes(self):
+    def test_archived_edit_allowed_but_view_only_permission_rejects_changes(self):
         self.staff.user_permissions.clear()
         self.staff.user_permissions.add(Permission.objects.get(codename="view_chart"))
         self.assertEqual(self.client.get(self.url).status_code, 200)
@@ -119,7 +99,7 @@ class ChartEditingTests(TestCase):
         self.staff.user_permissions.add(Permission.objects.get(codename="change_chart"))
         self.competition.status = "archived"
         self.competition.save()
-        self.assertEqual(self.client.post(self.url, self.payload()).status_code, 403)
+        self.assertEqual(self.client.post(self.url, self.payload()).status_code, 302)
 
     def test_sync_in_progress_rejects_changes(self):
         Chart.objects.filter(pk=self.chart.pk).update(net_sync_status="syncing")
