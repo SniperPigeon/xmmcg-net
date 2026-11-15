@@ -53,7 +53,6 @@
           <div class="task-title">
             <el-icon><Document /></el-icon>
             <strong>{{ task.title }}</strong>
-            <span class="designer">{{ task.designer }}</span>
           </div>
           <el-tag :type="task.completed ? 'success' : task.allocation_id ? 'primary' : 'warning'">{{
             task.completed ? '已提交' : task.allocation_id ? '分配任务' : '额外评分'
@@ -108,7 +107,7 @@
           v-for="chart in available"
           :key="chart.id"
           :value="chart.id"
-          :label="`${chart.title} · ${chart.designer}`"
+          :label="chart.title"
       /></el-select>
       <template #footer
         ><el-button @click="extraVisible = false">取消</el-button
@@ -168,7 +167,6 @@ const addExtra = () => {
   tasks.value.push({
     chart_id: chart.id,
     title: chart.title,
-    designer: chart.designer,
     completed: false,
     allocation_id: null,
     score: undefined,

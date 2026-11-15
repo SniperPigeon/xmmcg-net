@@ -77,30 +77,7 @@ class ChartUploadSerializer(AssetValidationMixin, serializers.ModelSerializer):
 
 
 class ChartSerializer(serializers.ModelSerializer):
-    is_collaboration = serializers.SerializerMethodField()
-    contributors = serializers.SerializerMethodField()
     can_retry_sync = serializers.SerializerMethodField()
-
-    def get_is_collaboration(self, chart):
-        return any(user.pk != chart.user_id for user in chart.contributors.all())
-
-    def get_contributors(self, chart):
-        request = self.context.get("request")
-        user = request.user if request else None
-        authors = list(chart.contributors.all())
-        if not user or not user.is_authenticated:
-            return []
-        if user.pk not in {chart.user_id, *(author.pk for author in authors)} and not (
-            user.is_staff
-            and (
-                user.has_perm("songs.view_chart") or user.has_perm("songs.change_chart")
-            )
-        ):
-            return []
-        by_id = {chart.user_id: chart.user, **{author.pk: author for author in authors}}
-        return [
-            {"id": author.pk, "username": author.username} for author in by_id.values()
-        ]
 
     def get_can_retry_sync(self, chart):
         request = self.context.get("request")
@@ -116,11 +93,8 @@ class ChartSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "guid",
-            "is_collaboration",
-            "contributors",
             "can_retry_sync",
             "title",
-            "designer",
             "status",
             "chart_file_url",
             "audio_url",

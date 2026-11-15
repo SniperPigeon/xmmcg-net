@@ -36,7 +36,6 @@ def tasks(request):
         return {
             "chart_id": chart.pk,
             "title": chart.title,
-            "designer": chart.designer,
             "allocation_id": allocation.pk if allocation else None,
             "completed": review is not None,
             "score": str(review.score) if review else None,
@@ -82,7 +81,7 @@ def available(request):
     )
     return Response(
         [
-            {"id": chart.pk, "title": chart.title, "designer": chart.designer}
+            {"id": chart.pk, "title": chart.title}
             for chart in reviewable_charts(config).exclude(pk__in=excluded)
             if person not in authors(chart)
         ]

@@ -205,10 +205,6 @@
           <div class="chart-info">
             <h3 class="chart-title" :title="chart.title">{{ chart.title }}</h3>
             <div class="chart-meta">
-              <span class="designer">
-                <el-icon><User /></el-icon>
-                {{ chart.designer }}
-              </span>
               <el-tag
                 v-if="syncLabels[chart.net_sync_status]"
                 size="small"
@@ -216,11 +212,7 @@
               >
                 {{ syncLabels[chart.net_sync_status] }}
               </el-tag>
-              <el-tag v-if="chart.is_collaboration" size="small" type="info">合作谱面</el-tag>
             </div>
-            <p v-if="chart.is_collaboration && chart.contributors?.length" class="contributors">
-              合作谱师：{{ chart.contributors.map((account) => account.username).join('、') }}
-            </p>
             <audio v-if="chart.audio_url" controls preload="none" :src="chart.audio_url" />
           </div>
           <div class="chart-actions">

@@ -86,7 +86,7 @@ class CollaborationTests(TestCase):
             {self.alice.pk, self.bob.pk},
         )
         self.assertEqual(chart.net_sync_status, "disabled")
-        self.assertTrue(response.data["chart"]["is_collaboration"])
+        self.assertNotIn("is_collaboration", response.data["chart"])
         for user in (self.alice, self.bob):
             self.assertEqual(
                 (
@@ -98,10 +98,7 @@ class CollaborationTests(TestCase):
             )
             own = self.client_for(user).get("/api/charts/me/").data
             self.assertEqual(own["count"], 1)
-            self.assertEqual(
-                {row["id"] for row in own["results"][0]["contributors"]},
-                {self.alice.pk, self.bob.pk},
-            )
+            self.assertNotIn("contributors", own["results"][0])
             self.assertEqual(
                 self.client_for(user).get("/api/users/me/").data["chartsCount"], 1
             )
@@ -129,13 +126,13 @@ class CollaborationTests(TestCase):
             403,
         )
         anonymous = APIClient().get(f"/api/charts/{chart.pk}/").data
-        self.assertTrue(anonymous["is_collaboration"])
-        self.assertEqual(anonymous["contributors"], [])
-        self.assertEqual(
+        self.assertNotIn("is_collaboration", anonymous)
+        self.assertNotIn("contributors", anonymous)
+        self.assertNotIn(
+            "contributors",
             self.client_for(self.carol)
             .get(f"/api/charts/{chart.pk}/")
-            .data["contributors"],
-            [],
+            .data,
         )
         repeated = self.client_for(self.alice).post(
             "/api/charts/",
