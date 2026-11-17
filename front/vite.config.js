@@ -3,7 +3,14 @@ import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue({
+      template: {
+        // Vidstack 播放器为 Web Components，交给浏览器解析而非当作 Vue 组件。
+        compilerOptions: { isCustomElement: (tag) => tag.startsWith('media-') },
+      },
+    }),
+  ],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),

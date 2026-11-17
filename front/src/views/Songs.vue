@@ -28,7 +28,7 @@
       />
       <el-form v-else label-width="100px" :disabled="busy" @submit.prevent="upload">
         <el-form-item label="歌曲标题" required>
-          <el-input v-model="title" maxlength="100" placeholder="请输入歌曲标题" />
+          <el-input v-model="form.title" maxlength="100" placeholder="请输入歌曲标题" />
         </el-form-item>
         <el-form-item label="音频文件" required>
           <el-upload
@@ -36,12 +36,14 @@
             :auto-upload="false"
             :limit="1"
             accept="audio/*"
-            :on-change="(file) => (audio = file.raw)"
-            :on-remove="() => (audio = null)"
+            :on-change="(file) => selectAudio(file.raw)"
+            :on-remove="() => selectAudio(null)"
             :on-exceed="replaceAudio"
           >
             <el-button type="primary" :icon="Headset">选择音频文件</el-button>
-            <template #tip><div class="form-tip">上传后自动参加抽选</div></template>
+            <template #tip>
+              <div class="form-tip">上传后自动参加抽选；标题可从音频标签读取</div>
+            </template>
           </el-upload>
         </el-form-item>
         <el-form-item>
@@ -81,7 +83,7 @@
         <div v-else class="songs-grid">
           <div v-for="song in songs" :key="song.id" class="song-item">
             <h3 class="song-title" :title="song.title">{{ song.title }}</h3>
-            <audio controls preload="none" :src="song.audio_url" />
+            <AudioPlayer :src="song.audio_url" :title="song.title" />
           </div>
         </div>
       </el-card>
@@ -89,15 +91,17 @@
   </div>
 </template>
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted, defineAsyncComponent } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Upload, Headset, Trophy, Pointer } from '@element-plus/icons-vue'
 import { getCompetitionStatus, getSongs, uploadSong, joinDraw, getMyDraws } from '../api'
+import { createPrefill, readAudioTitle } from '../utils/metadata'
+// 播放器体积较大，按需加载，避免增加首页首屏体积。
+const AudioPlayer = defineAsyncComponent(() => import('../components/AudioPlayer.vue'))
 const enabled = ref(false),
   canUpload = ref(false),
   error = ref(''),
   busy = ref(false),
-  title = ref(''),
   audio = ref(null),
   audioList = ref([]),
   songs = ref([]),
@@ -114,25 +118,45 @@ const load = async () => {
     error.value = err.message
   }
 }
+const form = reactive({ title: '' })
+const prefill = createPrefill(form)
+let audioVersion = 0
+const selectAudio = async (raw) => {
+  audio.value = raw
+  const version = ++audioVersion
+  if (!raw) return
+  let title
+  try {
+    title = await readAudioTitle(raw)
+  } catch {
+    if (version === audioVersion) ElMessage.warning('无法读取音频标签，请手动填写歌曲标题')
+    return
+  }
+  // 快速更换文件时，只采用最后一次选择的结果。
+  if (version !== audioVersion || !prefill.apply('title', title)) return
+  if (title) ElMessage.success(`已读取标题：${title}`)
+  else ElMessage.info('音频中没有标题信息，请手动填写')
+}
 const replaceAudio = (list) => {
   const raw = list[0]
   if (!raw) return
   audioList.value = [{ name: raw.name, raw, status: 'ready', uid: Date.now() }]
-  audio.value = raw
+  selectAudio(raw)
 }
 const upload = async () => {
-  if (!title.value.trim() || !audio.value) {
+  if (!form.title.trim() || !audio.value) {
     ElMessage.warning('请填写歌曲标题并选择音频文件')
     return
   }
   busy.value = true
   try {
-    const form = new FormData()
-    form.append('title', title.value)
-    form.append('audio_file', audio.value)
-    await uploadSong(form)
+    const data = new FormData()
+    data.append('title', form.title.trim())
+    data.append('audio_file', audio.value)
+    await uploadSong(data)
     ElMessage.success('已上传并报名')
-    title.value = ''
+    form.title = ''
+    prefill.reset()
     audio.value = null
     audioList.value = []
     await load()
@@ -189,11 +213,5 @@ onMounted(load)
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-audio {
-  display: block;
-  width: 100%;
-  height: 36px;
 }
 </style>
