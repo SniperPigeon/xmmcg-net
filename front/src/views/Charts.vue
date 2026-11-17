@@ -213,7 +213,7 @@
                 {{ syncLabels[chart.net_sync_status] }}
               </el-tag>
             </div>
-            <audio v-if="chart.audio_url" controls preload="none" :src="chart.audio_url" />
+            <AudioPlayer v-if="chart.audio_url" :src="chart.audio_url" :title="chart.title" />
           </div>
           <div class="chart-actions">
             <el-button
@@ -263,7 +263,7 @@
   </div>
 </template>
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, defineAsyncComponent } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Upload,
@@ -293,6 +293,9 @@ import {
   revokeCollaboration,
 } from '../api'
 import { currentUser, loadSession } from '../state/session'
+import { createPrefill, readMaidata } from '../utils/metadata'
+// 播放器体积较大，按需加载，避免增加首页首屏体积。
+const AudioPlayer = defineAsyncComponent(() => import('../components/AudioPlayer.vue'))
 const charts = ref([]),
   total = ref(0),
   page = ref(1),
@@ -381,7 +384,7 @@ const fileFields = [
     required: true,
     icon: Document,
     button: '选择谱面',
-    tip: 'maidata.txt 谱面文件，曲名与谱师名义请在上方填写',
+    tip: 'maidata.txt 谱面文件；选择后自动读取曲名与谱师名义，可再修改',
   },
   {
     name: 'audio_file',
@@ -426,9 +429,35 @@ const syncTypes = {
   failed: 'danger',
   disabled: 'info',
 }
+const prefill = createPrefill(form)
+const labels = { title: '曲名', designer: '谱师名义' }
+let chartVersion = 0
+// 选择谱面后读取 &title 与谱师名义（&des → &des_5 → &des_6），找不到的项留空待填写。
+const readChartMetadata = async (raw) => {
+  const version = ++chartVersion
+  if (!raw) return
+  let metadata
+  try {
+    metadata = await readMaidata(raw)
+  } catch {
+    if (version === chartVersion) ElMessage.warning('无法读取谱面文件，请手动填写曲名和谱师名义')
+    return
+  }
+  if (version !== chartVersion) return
+  const filled = ['title', 'designer'].filter((key) => prefill.apply(key, metadata[key]))
+  const found = filled.filter((key) => metadata[key])
+  if (found.length) formRef.value?.clearValidate(found)
+  if (filled.includes('designer') && !metadata.designer) {
+    const prefix = found.length ? `已读取${labels.title}；` : ''
+    ElMessage.info(`${prefix}谱面中没有 &des、&des_5 或 &des_6，请手动填写谱师名义`)
+  } else if (found.length) {
+    ElMessage.success(`已从谱面读取${found.map((key) => labels[key]).join('与')}`)
+  }
+}
 const setFile = (name, uploadFile) => {
   files[name] = uploadFile?.raw || null
   submissionKey = crypto.randomUUID()
+  if (name === 'chart_file') readChartMetadata(files[name])
 }
 // limit=1 时再次选择文件会触发 exceed，直接替换为新文件
 const replaceFile = (name, list) => {
@@ -475,6 +504,7 @@ const upload = async () => {
     Object.keys(fileLists).forEach((key) => (fileLists[key] = []))
     form.title = ''
     form.designer = ''
+    prefill.reset()
     collaboratorIds.value = []
     submissionKey = crypto.randomUUID()
     tab.value = 'mine'
@@ -644,11 +674,6 @@ onMounted(async () => {
   gap: 4px;
   font-size: 14px;
   color: var(--text-secondary);
-}
-
-audio {
-  width: 100%;
-  height: 36px;
 }
 
 .chart-actions {
